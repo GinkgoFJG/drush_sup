@@ -299,6 +299,11 @@ function drush_upgrade_site_upgrade($target_key = NULL) {
   // User has already been prompted; skip further confirms.
   drush_set_context('DRUSH_AFFIRMATIVE', TRUE);
 
+  // We also need to set 'invoke', so that calls to drush_invoke do not
+  // complain about cli options passed to site-upgrade that are not appropriate
+  // for our subcommands (e.g. sql-sync and pm-download) do not throw errors.
+  drush_set_option('invoke', TRUE);
+
   // We need to know where our destination settings file is regardless of which
   // code path we take; therefore, we will precompute it here.
 
