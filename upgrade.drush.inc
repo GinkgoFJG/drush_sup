@@ -662,7 +662,7 @@ function drush_upgrade_copy_settings(&$target_alias, $settings_destination) {
 }
 
 /**
- * Replace db_url with DB name from target. updatedb will later append a DBTNG compatible version.
+ * Replace db_url with DB name from target. Write a $databases record to settings.php.
  */
 function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
   $old_url = $GLOBALS['db_url'];
@@ -681,14 +681,13 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
   $append = "\n# Added by drush site-upgrade.";
   if (drush_drupal_major_version() <= 6) {
     $new_url = substr($old_url, 0, strrpos(trim($old_url), '/')) . '/'. $database_name;
-    $append .= "\n" . '$db_url = \'' . $new_url . '\';';
     $databases = drush_sitealias_convert_db_from_db_url($new_url);
   }
   else {
     $databases = $GLOBALS['databases'];
     $databases['default']['default']['database'] = $target_alias_databases['default']['default']['database'];
-    $append .= "\n" . '$databases = ' . var_export($databases, TRUE) . ';';
   }
+  $append .= "\n" . '$databases = ' . var_export($databases, TRUE) . ';';
   // Caching the database record in the alias record allows sql-sync to work
   // before updatedb is called. updatedb is what converts from a db_url to a
   // DBTNG array; this conversion is required by sql-sync.
