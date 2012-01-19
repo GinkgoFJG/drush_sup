@@ -70,6 +70,277 @@ function upgrade_drush_command() {
 }
 
 /**
+ * _drush_upgrade_site_upgrade_stages
+ *
+ * This function returns the stages of the finite state machine
+ * that controls the major upgrade process.  The key of each item
+ * in the stages array is the state name; the first state is always
+ * START, and the last state is always STOP.
+ *
+ * The value of each item in the stages array is the control object.
+ * The elements of the control object are as follows:
+ *
+ *  - description:
+ *
+ *    Shown to the user before the stage begins.  When running with --prompt,
+ *    the user will be asked whether to perform the step, skip it (do it manually)
+ *    or to stop.  Perhaps this should be the default, and --no-prompt should be 
+ *    required to skip prompts.  Note that other confirmations will come up under 
+ *    --no-prompt; as usual, these may be skiped with --yes.
+ *
+ *  - callback:
+ *
+ *    The name of the function callback that Drush will call to perform the
+ *    step.  If not specified, Drush will say: "Drush cannot perform this step;
+ *    you must do it manually."
+ *
+ *  - next:
+ *
+ *    In its simplest form, 'next' is a string that describes the next 
+ *    stage to proceed to.  The following are equivalent:
+ *
+ *      'next' => 'name of next stage',
+ *
+ *            IS THE SAME AS
+ *
+ *      'next' => array(
+ *        'ok' => 'name of next stage',
+ *        'error' => 'STOP',
+ *      ),
+ *
+ *    The return value from the callback function is used to select the
+ *    next state of the FSM to advance to.  TRUE is mapped to 'ok',
+ *    FALSE is mapped to 'error'.  Other return values are possible,
+ *    provided that they align with an entry in the 'next' array.
+ *
+ *    Maybe:  If the value of the selected item in the next array is an array,
+ *    then the user will be prompted as to which step to perform next.  Each
+ *    item of the array will contain a message to show the user in the prompt,
+ *    and the name of the next state to go to if the 
+ *    (Will be implemented if we need it.)
+ *
+ *  - optional:
+ *
+ *    If specified, the user will be advised that this step is optional
+ *    (does not always need to be done).
+ *
+ *  - unnecessary:
+ *
+ *    If specified, the user will be advised that this step is not necessary
+ *    (does not apply when using the Drush workflow).
+ *
+ */
+function _drush_upgrade_site_upgrade_stages() {
+  $stages['START'] = array(
+    'next' => 'UPGRADE.txt Major Upgrade Step 1'
+  );
+  // This list of stages is taken from UPGRADE.txt from Drupal 7.10.
+  // The intention is for the stages to track changes in UPGRADE.txt,
+  // and for the code to track the descriptions in the stages table.
+  // Report discrepancies in the drush_sup issue queue.
+  $stages['UPGRADE.txt Major Upgrade Step 1'] = array(
+    'description' =>
+      "
+        1. Check on the Drupal 7 status of your contributed and custom modules and
+           themes. See http://drupal.org/node/948216 for information on upgrading
+           contributed modules and themes. See http://drupal.org/node/895314 for a list
+           of modules that have been moved into core for Drupal 7, and instructions on
+           how to update them. See http://drupal.org/update/modules for information on
+           how to update your custom modules, and http://drupal.org/update/theme for
+           custom themes.
+
+           You may decide at this point that you cannot upgrade your site, because
+           needed modules or themes are not ready for Drupal 7.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 2',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 2'] = array(
+    'description' =>
+      "
+        2. Update to the latest available version of Drupal 6.x (if your current version
+           is Drupal 5.x, you have to upgrade to 6.x first). If you need to update,
+           download Drupal 6.x and follow the instructions in its UPGRADE.txt. This
+           document only applies for upgrades from 6.x to 7.x.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 3',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 3'] = array(
+    'description' =>
+      "
+        3. Log in as user ID 1 (the site maintenance user).
+      ",
+    'unnecessary' => 'You will not need to log in if Drush is used to perform all upgrade steps for you.',
+    'next' => 'UPGRADE.txt Major Upgrade Step 4',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 4'] = array(
+    'description' =>
+      "
+        4. Go to Administer > Site configuration > Site maintenance. Select
+           \"Off-line\" and save the configuration.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 5',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 5'] = array(
+    'description' =>
+      "
+        5. Go to Administer > Site building > Themes. Enable \"Garland\" and select it as
+           the default theme.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 6',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 6'] = array(
+    'description' =>
+      "
+        6. Go to Administer > Site building > Modules. Disable all modules that are not
+           listed under \"Core - required\" or \"Core - optional\". It is possible that some
+           modules cannot be disabled, because others depend on them. Repeat this step
+           until all non-core modules are disabled.
+
+           If you know that you will not re-enable some modules for Drupal 7.x and you
+           no longer need their data, then you can uninstall them under the Uninstall
+           tab after disabling them.
+           
+           Disable and uninstall any module that you do not plan to re-enable; Drush
+           will disable the rest for you.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 7',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 7'] = array(
+    'description' =>
+      "
+        7. On the command line or in your FTP client, remove the file
+
+             sites/default/default.settings.php
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 8',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 8'] = array(
+    'description' =>
+      "
+        8. Remove all old core files and directories, except for the 'sites' directory
+           and any custom files you added elsewhere.
+
+           If you made modifications to files like .htaccess or robots.txt, you will
+           need to re-apply them from your backup, after the new files are in place.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 9',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 9'] = array(
+    'description' =>
+      "
+        9. If you uninstalled any modules, remove them from the sites/all/modules and
+           other sites/*/modules directories. Leave other modules in place, even though
+           they are incompatible with Drupal 7.x.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 10',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 10'] = array(
+    'description' =>
+      "
+        10. Download the latest Drupal 7.x release from http://drupal.org to a
+           directory outside of your web root. Extract the archive and copy the files
+           into your Drupal directory.
+
+           On a typical Unix/Linux command line, use the following commands to download
+           and extract:
+
+             wget http://drupal.org/files/projects/drupal-x.y.tar.gz
+             tar -zxvf drupal-x.y.tar.gz
+
+           This creates a new directory drupal-x.y/ containing all Drupal files and
+           directories. Copy the files into your Drupal installation directory:
+
+             cp -R drupal-x.y/* drupal-x.y/.htaccess /path/to/your/installation
+
+           If you do not have command line access to your server, download the archive
+           from http://drupal.org using your web browser, extract it, and then use an
+           FTP client to upload the files to your web root.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 11',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 11'] = array(
+    'description' =>
+      "
+        11. Re-apply any modifications to files such as .htaccess or robots.txt.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 12',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 12'] = array(
+    'description' =>
+      "
+        12. Make your settings.php file writeable, so that the update process can
+           convert it to the format of Drupal 7.x. settings.php is usually located in
+
+             sites/default/settings.php
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 13',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 13'] = array(
+    'description' =>
+      "
+        13. Run update.php by visiting http://www.example.com/update.php (replace
+           www.example.com with your domain name). This will update the core database
+           tables.
+
+           If you are unable to access update.php do the following:
+
+           - Open settings.php with a text editor.
+
+           - Find the line that says:
+             \$update_free_access = FALSE;
+
+           - Change it into:
+             \$update_free_access = TRUE;
+
+           - Once the upgrade is done, \$update_free_access must be reverted to FALSE.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 14',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 14'] = array(
+    'description' =>
+      "
+        14. Backup your database after the core upgrade has run.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 15',
+    'unnecessary' => 'Drush automatically backs up the code and database every time updatedb runs',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 15'] = array(
+    'description' =>
+      "
+        15. Replace and update your non-core modules and themes, following the
+            procedures at http://drupal.org/node/948216
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 16',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 16'] = array(
+    'description' =>
+      "
+        16. Go to Administration > Reports > Status report. Verify that everything is
+            working as expected.
+      ",
+      // TODO: 'optional' => 'Drush can show you this information now via the `status report` command.',
+    'next' => 'UPGRADE.txt Major Upgrade Step 17',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 17'] = array(
+    'description' =>
+      "
+        17. Ensure that \$update_free_access is FALSE in settings.php.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 18',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 18'] = array(
+    'description' =>
+      "
+        18. Go to Administration > Configuration > Development > Maintenance mode.
+           Disable the \"Put site into maintenance mode\" checkbox and save the
+           configuration.
+      ",
+    'next' => 'STOP',
+  );
+  return $stages;
+}
+
+/**
  * Implement hook_drush_help().
  */
 function upgrade_drush_help($section) {
@@ -119,6 +390,89 @@ function drush_upgrade_site_upgrade_check_parameters($target_key = NULL) {
  * This runs bootstrapped to the SOURCE site.
  */
 function drush_upgrade_site_upgrade($target_key = NULL) {
+  // TODO: check to see if this is a restart of an earlier run
+  // (maybe prompt about that), and restore the cached contexts
+  // if it is.
+  $stages = _drush_upgrade_site_upgrade_stages();
+  _drush_upgrade_site_state_machine($stages['START']['next']);
+  // TODO: if we're not finished with the upgrade, cache the
+  // Drush contexts so that we can restart again later.
+}
+
+function _drush_upgrade_site_state_machine($initial_state) {
+  $stages = _drush_upgrade_site_upgrade_stages();
+  $state = $initial_state;
+  while ($state != 'STOP') {
+    $control = $stages[$state];
+    $control += array(
+      'description' => '',
+      'optional' => '',
+      'unnecessary' => '',
+      'callback' => NULL,
+      'prompt' => 'What would you like to do?',
+      'next' => 'STOP',
+    );
+    // TODO: call an 'alter' callback on the control structure
+    if (!is_array($control['next'])) {
+      $control['next'] = array(
+        'ok' => $control['next'],
+        'error' => 'STOP',
+      );
+    }
+    foreach (array('description', 'optional', 'unnecessary') as $message_key) {
+      if (!empty($control[$message_key])) {
+        drush_print($control[$message_key]);
+      }
+    }
+    $callback = $control['callback'];
+    $selection_options = array();
+    $stage_result = TRUE;
+    if (!$callback) {
+      if (empty($control['unnecessary'])) {
+        drush_print(dt("Drush cannot do this step; you must perform it manually."));
+      }
+      $selection_options = array(
+        'skip' => dt("I did the step manually; continue."),
+      );
+    }
+    else {
+      $selection_options = array(
+        'run' => dt("Do it for me."),
+        'manual' => dt("I will do this step manually."),
+      );
+    }
+    if (!empty($control['optional']) || !empty($control['unnecessary'])) {
+      $selection_options['skip'] = dt("Skip this step.");
+    }
+    $selection = drush_choice($selection_options, $control['prompt']);
+    if (!$selection) {
+      return drush_user_abort();
+    }
+    if (($selection == 'run') && $callback) {
+      // TODO: add arguments, use call_user_func_array
+      $stage_result = $callback();
+    }
+    if ($stage_result === TRUE) {
+      $stage_result = 'ok';
+    }
+    else {
+      $stage_result = 'error';
+    }
+    if (array_key_exists($stage_result, $control['next'])) {
+      // TODO: if $control['next'][$stage_result] is an array, prompt the user
+      // and ask which step to do next.
+      $state = $control['next'][$stage_result];
+    }
+    else {
+      return drush_set_error('DRUSH_UPGRADE_STATE_MACHINE_ERROR', dt("Cannot continue; no next stage."));
+    }
+  }
+}
+
+/**
+ * Old version of the code; this logic all needs to be refactored into stages run by the FSM.
+ */
+function drush_upgrade_site_upgrade_old_version($target_key = NULL) {
   // Presume we are ready to go (n.b. some checks already performed in 'validate')
   $ready_to_upgrade = TRUE;
   $result = TRUE;
