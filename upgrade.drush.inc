@@ -669,7 +669,7 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
   $target_alias_databases = sitealias_get_databases_from_record($target_alias);
   $database_name = $target_alias_databases['default']['default']['database'];
   if (empty($database_name)) {
-    $database_name = str_replace("@", "", $target_alias['name']) . "db";
+    $database_name = str_replace("@", "", $target_alias['#name']) . "db";
     drush_log(dt("No database name specified; defaulting to !dbname", array("!dbname" => $database_name)), 'notice');
   }
 
