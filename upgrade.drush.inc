@@ -58,6 +58,14 @@ function upgrade_drush_command() {
       'projects' => 'The projects that must be downloaded to provide the specified module list.',
     ),
   );
+  $items['docs-upgrading'] = array(
+    'description' => 'Upgrading Drupal using the drush site-upgrade command.',
+    'hidden' => TRUE,
+    'topic' => TRUE,
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
+    'callback' => 'drush_print_file',
+    'callback arguments' => array(dirname(__FILE__) . '/upgrade.html'),
+  );
   return $items;
 }
 
