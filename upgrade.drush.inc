@@ -295,6 +295,10 @@ function drush_upgrade_site_upgrade($target_key = NULL) {
       return drush_user_abort();
     }
   }
+  
+  if ($selection == 'reuse') {
+    return drush_set_error('DRUSH_SITE_UPGRADE_REUSE_UNSUPPORTED', dt("Unfortunately, the reuse option does not work correctly. You must upgrade manually."));
+  }
 
   // User has already been prompted; skip further confirms.
   drush_set_context('DRUSH_AFFIRMATIVE', TRUE);
