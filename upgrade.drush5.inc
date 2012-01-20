@@ -23,6 +23,7 @@ function upgrade_drush_command() {
       'drush site-upgrade @onward' => 'Upgrade from the current site to the site specified by @onward alias.',
     ),
     'options' => array(
+      'straightforward' => 'Run all of the straightforward steps automatically; only prompt at important steps.',
       'structure-tables-key' => 'A key in the structure-tables array. @see example.drushrc.php. Defaults to \'common\'.',
       'source-dump' => 'Path to dump file. Medium or large sized sites should set this. Optional; default is to create a temporary file.',
       'db-su' => 'DB username to use when dropping and creating the target database. Optional.',
@@ -113,19 +114,26 @@ function upgrade_drush_command() {
  *    FALSE is mapped to 'error'.  Other return values are possible,
  *    provided that they align with an entry in the 'next' array.
  *
- *    Maybe:  If the value of the selected item in the next array is an array,
+ *    If the value of the selected item in the next array is an array,
  *    then the user will be prompted as to which step to perform next.  Each
- *    item of the array will contain a message to show the user in the prompt,
- *    and the name of the next state to go to if the 
- *    (Will be implemented if we need it.)
+ *    item of the array will contain a message to show the user in the prompt
+ *    (the VALUE), and the name of the next state to go to if the option is 
+ *    selected (the KEY).  Note that single-item arrays also make sense here, 
+ *    as this will cause Drush to prompt to cancel / continue.
  *
  *  - selection-options:
  *
  *    Provides the list of prompts to present to the user.
  *
  *      'run' => 'Do it for me.'
- *      'skip' => 'Skip this step.'
- *      'manual' => 'I will do this step manually.'
+ *      '#skip' => 'Skip this step.'
+ *      '#manual' => 'I will do this step manually.'
+ *
+ *    n.b. Key values that start with # will cause the callback function
+ *    to be skipped with a $stage_result of TRUE, whereas all other
+ *    values will call the callback function.  If the callback function
+ *    is skipped and the selected option exists in the 'next' array,
+ *    then the $stage_result will be set to the selected option key.
  *
  *  - required:
  *
@@ -143,6 +151,13 @@ function upgrade_drush_command() {
  *
  *    If specified, the user will be advised that this step is not necessary
  *    (does not apply when using the Drush workflow).
+ *
+ *  - straightforward:
+ *
+ *    This step does not take much thought or consideration on the part
+ *    of the user.  Straightforward steps can be run automatically
+ *    (without prompting) with the --straightforward option.
+ *    Unnecessary steps are automatically considered straightforward.
  *
  */
 function _drush_upgrade_site_upgrade_stages() {
@@ -169,7 +184,15 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     'callback' => 'drush_upgrade_check_modules_and_themes',
     'required' => 'Show upgrade readiness report.',
-    'next' => 'UPGRADE.txt Major Upgrade Step 2',
+    'straightforward' => TRUE,
+    'next' => array(
+      'ok' => array(
+        '#prompt' => 'Please review the report above.  You may want to uninstall modules that are not ready to upgrade yet.  What would you like to do next?',
+        'UPGRADE.txt Major Upgrade Step 2' => "Begin upgrade",
+        'UPGRADE.txt Major Upgrade Step 1' => "Run report again",
+      ),
+      'error' => STOP,
+    ),
   );
   $stages['UPGRADE.txt Major Upgrade Step 2'] = array(
     // TODO: Eventually we will be picking our finite state machine stages
@@ -184,7 +207,7 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     // TODO: we could use pm-updatecode here to insure that Drupal is up to date.
     // Do we update all of contrib to the latest recommended release too?
-    'selection-options' => array('skip' => 'I have updated to the latest available version of Drupal 6.x.'),
+    'selection-options' => array('#skip' => 'I have updated to the latest available version of Drupal 6.x.'),
     'next' => 'UPGRADE.txt Major Upgrade Step 3',
   );
   $stages['UPGRADE.txt Major Upgrade Step 3'] = array(
@@ -209,6 +232,7 @@ function _drush_upgrade_site_upgrade_stages() {
         5. Go to Administer > Site building > Themes. Enable \"Garland\" and select it as
            the default theme.
       ",
+    'straightforward' => TRUE,
     'next' => 'UPGRADE.txt Major Upgrade Step 6',
   );
   $stages['UPGRADE.txt Major Upgrade Step 6'] = array(
@@ -222,10 +246,8 @@ function _drush_upgrade_site_upgrade_stages() {
            If you know that you will not re-enable some modules for Drupal 7.x and you
            no longer need their data, then you can uninstall them under the Uninstall
            tab after disabling them.
-           
-           Disable and uninstall any module that you do not plan to re-enable; Drush
-           will disable the rest for you.
       ",
+    'unnecessary' => 'Drush will automatically disable all non-core modules in the target site without affecting the source site.',
     'next' => 'UPGRADE.txt Major Upgrade Step 7',
   );
   $stages['UPGRADE.txt Major Upgrade Step 7'] = array(
@@ -235,6 +257,7 @@ function _drush_upgrade_site_upgrade_stages() {
 
              sites/default/default.settings.php
       ",
+    'straightforward' => TRUE,
     'next' => 'UPGRADE.txt Major Upgrade Step 8',
   );
   $stages['UPGRADE.txt Major Upgrade Step 8'] = array(
@@ -261,24 +284,25 @@ function _drush_upgrade_site_upgrade_stages() {
     'description' =>
       "
         10. Download the latest Drupal 7.x release from http://drupal.org to a
-           directory outside of your web root. Extract the archive and copy the files
-           into your Drupal directory.
+            directory outside of your web root. Extract the archive and copy the files
+            into your Drupal directory.
 
-           On a typical Unix/Linux command line, use the following commands to download
-           and extract:
+            On a typical Unix/Linux command line, use the following commands to download
+            and extract:
 
-             wget http://drupal.org/files/projects/drupal-x.y.tar.gz
-             tar -zxvf drupal-x.y.tar.gz
+              wget http://drupal.org/files/projects/drupal-x.y.tar.gz
+              tar -zxvf drupal-x.y.tar.gz
 
-           This creates a new directory drupal-x.y/ containing all Drupal files and
-           directories. Copy the files into your Drupal installation directory:
+            This creates a new directory drupal-x.y/ containing all Drupal files and
+            directories. Copy the files into your Drupal installation directory:
 
-             cp -R drupal-x.y/* drupal-x.y/.htaccess /path/to/your/installation
+              cp -R drupal-x.y/* drupal-x.y/.htaccess /path/to/your/installation
 
-           If you do not have command line access to your server, download the archive
-           from http://drupal.org using your web browser, extract it, and then use an
-           FTP client to upload the files to your web root.
+            If you do not have command line access to your server, download the archive
+            from http://drupal.org using your web browser, extract it, and then use an
+            FTP client to upload the files to your web root.
       ",
+    'straightforward' => TRUE,
     'next' => 'UPGRADE.txt Major Upgrade Step 11',
   );
   $stages['UPGRADE.txt Major Upgrade Step 11'] = array(
@@ -286,6 +310,7 @@ function _drush_upgrade_site_upgrade_stages() {
       "
         11. Re-apply any modifications to files such as .htaccess or robots.txt.
       ",
+    'optional' => "If you had no modifications to .htaccess or robots.txt, you don't need to do anything here.",
     'next' => 'UPGRADE.txt Major Upgrade Step 12',
   );
   $stages['UPGRADE.txt Major Upgrade Step 12'] = array(
@@ -296,6 +321,7 @@ function _drush_upgrade_site_upgrade_stages() {
 
              sites/default/settings.php
       ",
+    'straightforward' => TRUE,
     'next' => 'UPGRADE.txt Major Upgrade Step 13',
   );
   $stages['UPGRADE.txt Major Upgrade Step 13'] = array(
@@ -349,6 +375,7 @@ function _drush_upgrade_site_upgrade_stages() {
       "
         17. Ensure that \$update_free_access is FALSE in settings.php.
       ",
+    'straightforward' => TRUE,
     'next' => 'UPGRADE.txt Major Upgrade Step 18',
   );
   $stages['UPGRADE.txt Major Upgrade Step 18'] = array(
@@ -358,6 +385,7 @@ function _drush_upgrade_site_upgrade_stages() {
            Disable the \"Put site into maintenance mode\" checkbox and save the
            configuration.
       ",
+    'straightforward' => TRUE,
     'next' => 'STOP',
   );
   return $stages;
@@ -413,18 +441,49 @@ function drush_upgrade_site_upgrade_check_parameters($target_key = NULL) {
  * This runs bootstrapped to the SOURCE site.
  */
 function drush_upgrade_site_upgrade($target_key = NULL) {
+  // PREPARE:  Find the target version and determine the contrib projects and enabled modules installed.
+
+  $source_version = drush_drupal_major_version();
+  $target_version = $source_version + 1;
+  if (isset($target_key)) {
+    $target_alias = drush_sitealias_get_record($target_key);
+    if (!empty($target_alias)) {
+      $destination_core = $target_alias['root'];
+
+      $destination_conf_path = conf_path();
+      if (drush_get_option('force-sites-default')) {
+        $destination_conf_path = 'sites/default';
+      }
+    }
+  }
+
+  // Cache our main variables in the FSM context
+  $fsm_context['source_version'] = $source_version;
+  $fsm_context['target_version'] = $target_version;
+  $fsm_context['target_key'] = $target_key;
+  $fsm_context['target_alias'] = $target_alias;
+  $fsm_context['straightforward'] = drush_get_option('straightforward', FALSE);
+  
+  // TODO: Look up appropriate upgrade stages for the version of Drupal being upgraded.
+  $stages = _drush_upgrade_site_upgrade_stages();
+ 
   // TODO: check to see if this is a restart of an earlier run
   // (maybe prompt about that), and restore the cached contexts
-  // if it is.
-  $stages = _drush_upgrade_site_upgrade_stages();
-  _drush_upgrade_site_state_machine($stages['START']['next']);
+  // if it is.  We will look for a well-known file at the
+  // destination root directory.
+    
+  // Start up the FSM and run the upgrade
+  _drush_upgrade_site_state_machine($fsm_context, $stages, $stages['START']['next']);
+
   // TODO: if we're not finished with the upgrade, cache the
   // Drush contexts so that we can restart again later.
 }
 
-function _drush_upgrade_site_state_machine($initial_state) {
-  $stages = _drush_upgrade_site_upgrade_stages();
+function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state) {
   $state = $initial_state;
+  $fsm_context += array(
+    'straightforward' => FALSE,
+  );
   while ($state != 'STOP') {
     $control = $stages[$state];
     $control += array(
@@ -432,6 +491,7 @@ function _drush_upgrade_site_state_machine($initial_state) {
       'required' => '',
       'optional' => '',
       'unnecessary' => '',
+      'straightforward' => FALSE,
       'callback' => NULL,
       'prompt' => 'What would you like to do?',
       'selection-options' => array(),
@@ -452,12 +512,13 @@ function _drush_upgrade_site_state_machine($initial_state) {
     $control['callback'] = $control['callback'];
     $selection_options = $control['selection-options'];
     $stage_result = TRUE;
+    $prompt_user = TRUE;
     if (!$control['callback']) {
       if (empty($control['unnecessary'])) {
         drush_print(dt("Drush cannot do this step; you must perform it manually."));
       }
       $selection_options += array(
-        'skip' => dt("I did the step manually; continue."),
+        '#skip' => dt("I did the step manually; continue."),
       );
     }
     elseif (!empty($control['required'])) {
@@ -466,22 +527,29 @@ function _drush_upgrade_site_state_machine($initial_state) {
     else {
       $selection_options += array(
         'run' => dt("Do it for me."),
-        'manual' => dt("I will do this step manually."),
+        '#manual' => dt("I will do this step manually."),
       );
     }
     if (!empty($control['optional']) || !empty($control['unnecessary'])) {
       $selection_options += array(
-        'skip' => dt("Skip this step."),
+        '#skip' => dt("Skip this step."),
       );
     }
-    $control['selection'] = drush_choice($selection_options, $control['prompt']);
+    if (($control['callback']) && ($control['straightforward'] || $control['unnecessary']) && $fsm_context['straightforward']) {
+      $prompt_user = FALSE;
+    }
+    if ($prompt_user) {
+      $control['selection'] = drush_choice($selection_options, $control['prompt']);
+    }
+    else {
+      $control['selection'] = 'run';
+    }
     if (!$control['selection']) {
       return drush_user_abort();
     }
     // TODO: call a 'post selection' callback on the control structure
-    if (($control['selection'] == 'run') && $control['callback']) {
-      // TODO: add arguments, use call_user_func_array
-      $stage_result = $control['callback']($control);
+    if (($control['selection']{0} != '#') && $control['callback']) {
+      $stage_result = $control['callback']($fsm_context, $control);
     }
     if ($stage_result === TRUE) {
       $stage_result = 'ok';
@@ -490,9 +558,18 @@ function _drush_upgrade_site_state_machine($initial_state) {
       $stage_result = 'error';
     }
     if (array_key_exists($stage_result, $control['next'])) {
-      // TODO: if $control['next'][$stage_result] is an array, prompt the user
-      // and ask which step to do next.
+      // If $control['next'][$stage_result] is an array, prompt the user
+      // and ask which step to do next; otherwise, the value is
+      // the next stage to go to.
       $state = $control['next'][$stage_result];
+      if (is_array($state)) {
+        $next_state_prompt = dt("What would you like to do?");
+        if (array_key_exists('#prompt', $state)) {
+          $next_state_prompt = $state['#prompt'];
+          unset($state['#prompt']);
+        }
+        $state = drush_choice($state, $next_state_prompt);
+      }
     }
     else {
       return drush_set_error('DRUSH_UPGRADE_STATE_MACHINE_ERROR', dt("Cannot continue; no next stage."));
@@ -500,8 +577,13 @@ function _drush_upgrade_site_state_machine($initial_state) {
   }
 }
 
-function drush_upgrade_check_modules_and_themes() {
-  drush_print(dt("Gathering information about of contrib module upgrade availability..."));
+function drush_upgrade_check_modules_and_themes(&$fsm_context, $control) {
+  $source_version = $fsm_context['source_version'];
+  $target_version = $fsm_context['target_version'];
+  $target_key = $fsm_context['target_key'];
+  $target_alias = $fsm_context['target_alias'];
+
+  drush_print(dt("Gathering information about contrib module upgrade availability..."));
   // Get a list of enabled contrib extensions.
   $values = drush_invoke_process('@self', 'pm-list', array(), array('status'=>'enabled','no-core'=>TRUE), array('integrate' => FALSE, 'override-simulated' => TRUE));
   if ($values['error_status'] != 0) return FALSE;
