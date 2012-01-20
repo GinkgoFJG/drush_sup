@@ -119,6 +119,21 @@ function upgrade_drush_command() {
  *    and the name of the next state to go to if the 
  *    (Will be implemented if we need it.)
  *
+ *  - selection-options:
+ *
+ *    Provides the list of prompts to present to the user.
+ *
+ *      'run' => 'Do it for me.'
+ *      'skip' => 'Skip this step.'
+ *      'manual' => 'I will do this step manually.'
+ *
+ *  - required:
+ *
+ *    If specified, then the option to skip the step or do it manually is
+ *    not provided.  This is used for stages that gather required information
+ *    that will be used later, for example.  The value of this variable
+ *    is used to replace the prompt for the 'run' item in the selection options.
+ *
  *  - optional:
  *
  *    If specified, the user will be advised that this step is optional
@@ -152,9 +167,14 @@ function _drush_upgrade_site_upgrade_stages() {
            You may decide at this point that you cannot upgrade your site, because
            needed modules or themes are not ready for Drupal 7.
       ",
+    'callback' => 'drush_upgrade_check_modules_and_themes',
+    'required' => 'Show upgrade readiness report.',
     'next' => 'UPGRADE.txt Major Upgrade Step 2',
   );
   $stages['UPGRADE.txt Major Upgrade Step 2'] = array(
+    // TODO: Eventually we will be picking our finite state machine stages
+    // based on the version of Drush being upgraded, so we'll be able to
+    // rewrite the text below to presume a 6.x-to-7.x upgrade.
     'description' =>
       "
         2. Update to the latest available version of Drupal 6.x (if your current version
@@ -162,6 +182,9 @@ function _drush_upgrade_site_upgrade_stages() {
            download Drupal 6.x and follow the instructions in its UPGRADE.txt. This
            document only applies for upgrades from 6.x to 7.x.
       ",
+    // TODO: we could use pm-updatecode here to insure that Drupal is up to date.
+    // Do we update all of contrib to the latest recommended release too?
+    'selection-options' => array('skip' => 'I have updated to the latest available version of Drupal 6.x.'),
     'next' => 'UPGRADE.txt Major Upgrade Step 3',
   );
   $stages['UPGRADE.txt Major Upgrade Step 3'] = array(
@@ -406,10 +429,12 @@ function _drush_upgrade_site_state_machine($initial_state) {
     $control = $stages[$state];
     $control += array(
       'description' => '',
+      'required' => '',
       'optional' => '',
       'unnecessary' => '',
       'callback' => NULL,
       'prompt' => 'What would you like to do?',
+      'selection-options' => array(),
       'next' => 'STOP',
     );
     // TODO: call an 'alter' callback on the control structure
@@ -424,38 +449,44 @@ function _drush_upgrade_site_state_machine($initial_state) {
         drush_print($control[$message_key]);
       }
     }
-    $callback = $control['callback'];
-    $selection_options = array();
+    $control['callback'] = $control['callback'];
+    $selection_options = $control['selection-options'];
     $stage_result = TRUE;
-    if (!$callback) {
+    if (!$control['callback']) {
       if (empty($control['unnecessary'])) {
         drush_print(dt("Drush cannot do this step; you must perform it manually."));
       }
-      $selection_options = array(
+      $selection_options += array(
         'skip' => dt("I did the step manually; continue."),
       );
     }
+    elseif (!empty($control['required'])) {
+      $selection_options['run'] = $control['required'];
+    }
     else {
-      $selection_options = array(
+      $selection_options += array(
         'run' => dt("Do it for me."),
         'manual' => dt("I will do this step manually."),
       );
     }
     if (!empty($control['optional']) || !empty($control['unnecessary'])) {
-      $selection_options['skip'] = dt("Skip this step.");
+      $selection_options += array(
+        'skip' => dt("Skip this step."),
+      );
     }
-    $selection = drush_choice($selection_options, $control['prompt']);
-    if (!$selection) {
+    $control['selection'] = drush_choice($selection_options, $control['prompt']);
+    if (!$control['selection']) {
       return drush_user_abort();
     }
-    if (($selection == 'run') && $callback) {
+    // TODO: call a 'post selection' callback on the control structure
+    if (($control['selection'] == 'run') && $control['callback']) {
       // TODO: add arguments, use call_user_func_array
-      $stage_result = $callback();
+      $stage_result = $control['callback']($control);
     }
     if ($stage_result === TRUE) {
       $stage_result = 'ok';
     }
-    else {
+    elseif ($stage_result === FALSE) {
       $stage_result = 'error';
     }
     if (array_key_exists($stage_result, $control['next'])) {
@@ -467,6 +498,133 @@ function _drush_upgrade_site_state_machine($initial_state) {
       return drush_set_error('DRUSH_UPGRADE_STATE_MACHINE_ERROR', dt("Cannot continue; no next stage."));
     }
   }
+}
+
+function drush_upgrade_check_modules_and_themes() {
+  drush_print(dt("Gathering information about of contrib module upgrade availability..."));
+  // Get a list of enabled contrib extensions.
+  $values = drush_invoke_process('@self', 'pm-list', array(), array('status'=>'enabled','no-core'=>TRUE), array('integrate' => FALSE, 'override-simulated' => TRUE));
+  if ($values['error_status'] != 0) return FALSE;
+  $contrib_extensions = array_keys($values['object']);
+
+  // Get a list of enabled core extensions.
+  $values = drush_invoke_process('@self', 'pm-list', array(), array('status'=>'enabled','core'=>TRUE), array('integrate' => FALSE, 'override-simulated' => TRUE));
+  if ($values['error_status'] != 0) return FALSE;
+  $core_extensions = array_keys($values['object']);
+
+  // Make a list of modules that are not available to be enabled in the target
+  // version of Drupal, either because they have not been ported yet, or because
+  // they have been rolled into core.
+  $unavailable_extensions = array();
+
+  // Get the list of modules the user would like to uninstall (if any).
+  $uninstall_extensions = drush_get_option('uninstall', '');
+  if ($uninstall_extensions == "all") {
+    $uninstall_extensions = $contrib_extensions;
+  }
+  else {
+    $uninstall_extensions = explode(',', $uninstall_extensions);
+  }
+
+  // WARN:  Tell the user about any special situations that might exist with contrib modules.
+
+  $project_download_list = array();
+  $project_info_map = array();
+  $extension_info = drush_get_extensions();
+  if (!empty($contrib_extensions) && !drush_get_option('core-only')) {
+    // Make a list of all of the extensions to download.  We will
+    // download everything in the contrib extension list, but we
+    // will skip projects that already exist.
+    $special_projects = drush_upgrade_project_map($target_version);
+    $in_core = array();
+    $special_warning = array();
+    foreach ($contrib_extensions as $extension_name) {
+      drush_print($extension_name);
+      // Only check extensions that are NOT in our uninstall list.
+      if (!in_array($extension_name, $uninstall_extensions) && array_key_exists($extension_name, $extension_info)) {
+        if (empty($extension_info[$extension_name]->info['project'])) {
+          drush_log(dt('No project information could be found for the module !module. Enable git_deploy project if you are using Git clones as projects.', array('!module' => $extension_name)), 'warning');
+        }
+        else {
+          $project = $extension_info[$extension_name]->info['project'];
+          $project_info_map[$project]['name'] = $extension_info[$extension_name]->info['name'];
+          $project_info_map[$project]['version'] = $extension_info[$extension_name]->info['version'];
+          // Check our lookup table to see if a project has been renamed.
+          if (array_key_exists($project, $special_projects['project-remap'])) {
+            $project = $special_projects['project-remap'][$project];
+          }
+          // If the module has been rolled into core in the next major release of
+          // Drupal, then we do not need to download it.  Add it to an array for
+          // reporting purposes.
+          if ((in_array($project, $special_projects['projects-in-core'])) || (in_array($extension_name, $special_projects['modules-in-core']))) {
+            $in_core[$extension_name] = $extension_name;
+            // Might some of these need to be enabled?
+            $unavailable_extensions[] = $extension_name;
+          }
+          elseif (($extension_info[$extension_name]->type == 'module') && !is_dir($destination_core . '/sites/all/modules/' . $project) && !is_dir($destination_core . '/' . $destination_conf_path . '/modules/' . $project)) {
+            $project_download_list[$project][] = $extension_name;
+          }
+          // If there is a special warning about a project, then add it
+          // to the warning list for later reporting.
+          if (array_key_exists($project . ':' . $extension_name, $special_projects['warning'])) {
+            $special_warning[$project] = $special_projects['warning'][$project . ':' . $extension_name];
+          }
+          elseif ((array_key_exists($project, $special_projects['warning'])) && (!array_key_exists($project, $special_warning))) {
+            $special_warning[$project] = $special_projects['warning'][$project];
+          }
+        }
+      }
+    }
+
+    $rows[] = array(dt('Project'), dt('Title'), dt('Installed'), dt('Available'), dt('Status'));
+    // Consider each project from the contrib extensions and check with PM to see if there is
+    // a recommended release available to download.  If there is NO release available, then
+    // we are not ready to upgrade (but still can, without that project); if there is no RECOMMENDED
+    // release, then we might not be ready to upgrade (but still can, with a non-recommended release).
+    if (!empty($project_download_list)) {
+      $result = drush_invoke_process('@none', 'pm-releases', array_keys($project_download_list), array('default-major' => $target_version), array('integrate' => FALSE, 'override-simulated' => TRUE, 'log' => FALSE));
+      $project_releases = $result['object'];
+      foreach ($project_download_list as $project => $extension_list) {
+        if (!array_key_exists($project, $project_releases) || empty($project_releases[$project]['releases'])) {
+          $unavailable_extensions = array_merge($unavailable_extensions, $extension_list);
+          $ready_to_upgrade = FALSE;
+          $available_version = '-';
+          $status = dt("NO !major_version RELEASES", array('!major_version' => $target_version . ".x"));
+        }
+        else {
+          $all_versions = array_keys($project_releases[$project]['releases']);
+          $available_version = $all_versions[0];
+          if (empty($project_releases[$project]['recommended'])) {
+            $ready_to_upgrade = 'maybe';
+            $status = implode(',', $project_releases[$project]['releases'][$available_version]['release_status']);
+          }
+          else {
+            $status = dt('Recommended');
+          }
+        }
+        $title = $project_info_map[$project]['name'];
+        $installed_version = $project_info_map[$project]['version'];
+        $rows[] = array($project, $title, $installed_version, $available_version, $status);
+      }
+    }
+    drush_print_table($rows);
+
+    // Print out some messages about projects that migrated  to core, or modules that will require special processing.
+    if (!empty($in_core)) {
+      drush_log(dt('The following contrib modules were enabled in your Drupal site, but are now standard in core: !in_core.  These modules may need to be reconfigured after the upgrade is complete.', array('!in_core' => implode(', ', $in_core))), 'ok');
+    }
+    foreach ($special_warning as $project => $warning) {
+      if ($warning === TRUE) {
+        $warning = 'Please see !project_page and !source for more information on how to do this.';
+      }
+      if ($warning === FALSE) {
+        $warning = 'So far there is no indication of when a migration path will be provided.  Check !project_page for updates.';
+        $ready_to_upgrade = 'maybe';
+      }
+      drush_log(dt("You are using the project !project, which requires data migration or other special processing.  $warning", array('!project' => $project, '!project_page' => 'http://drupal.org/project/' . $project, '!source' => $special_projects['source'])), 'warning');
+    }
+  }
+  return TRUE;
 }
 
 /**
