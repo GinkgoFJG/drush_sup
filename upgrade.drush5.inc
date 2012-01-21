@@ -89,6 +89,18 @@ function upgrade_drush_command() {
  *    required to skip prompts.  Note that other confirmations will come up under 
  *    --no-prompt; as usual, these may be skiped with --yes.
  *
+ *  - omit-stage-header:
+ *
+ *    Leave off the header with the stage name that is usually displayed
+ *    above the stage description.
+ *
+ *  - no-op:
+ *
+ *    There is no operation associated with this stage; for example, it
+ *    might just be a stage that prompts the user before going on to the
+ *    next step.  Without the 'no-op' flag, Drush will advise the user
+ *    that they must do the step manually if there is no 'callback' item.
+ *
  *  - verify:
  *
  *    The name of a function callback that Drush will call to verify whether
@@ -125,13 +137,6 @@ function upgrade_drush_command() {
  *    next state of the FSM to advance to.  TRUE is mapped to 'ok',
  *    FALSE is mapped to 'error'.  Other return values are possible,
  *    provided that they align with an entry in the 'next' array.
- *
- *    If the value of the selected item in the next array is an array,
- *    then the user will be prompted as to which step to perform next.  Each
- *    item of the array will contain a message to show the user in the prompt
- *    (the VALUE), and the name of the next state to go to if the option is 
- *    selected (the KEY).  Note that single-item arrays also make sense here, 
- *    as this will cause Drush to prompt to cancel / continue.
  *
  *  - selection-options:
  *
@@ -196,12 +201,14 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     'callback' => 'drush_upgrade_check_modules_and_themes',
     'continue' => TRUE,
-    'next' => array(
-      'ok' => array(
-        '#prompt' => 'Please review the report above.  You may want to uninstall modules that are not ready to upgrade yet.  What would you like to do next?',
-        'UPGRADE.txt Major Upgrade Step 2' => "Begin upgrade",
-      ),
-    ),
+    'next' => 'UPGRADE.txt Major Upgrade Prompt',
+  );
+  $stages['UPGRADE.txt Major Upgrade Prompt'] = array(
+    'prompt' => 'Please review the upgread readiness report. You may want to uninstall modules that are not ready to upgrade yet.',
+    'omit-stage-header' => TRUE,
+    'no-op' => TRUE,
+    'selection-options' => array('#skip' => 'Begin upgrade'),
+    'next' => 'UPGRADE.txt Major Upgrade Step 2',
   );
   $stages['UPGRADE.txt Major Upgrade Step 2'] = array(
     // TODO: Eventually we will be picking our finite state machine stages
@@ -588,9 +595,9 @@ function _drush_upgrade_rewrap_msg($msg) {
   $msg = preg_replace("/<br>/s", "\n\n", $msg);
   $msg = wordwrap($msg, drush_get_context('DRUSH_COLUMNS', 80) - 5);
   if (preg_match("/^ *([0-9]+\. +)/", $msg, $matches)) {
-    $msg = trim(preg_replace("/^/m", str_pad('', strlen($matches[1])), $msg));
+    $msg = preg_replace("/^/m", str_pad('', strlen($matches[1])), $msg);
   }
-  return $msg;
+  return trim($msg);
 }
 
 function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state) {
@@ -601,6 +608,8 @@ function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state
   while ($state != 'STOP') {
     $control = $stages[$state];
     $control += array(
+      'omit-stage-header' => FALSE,
+      'no-op' => FALSE,
       'description' => '',
       'required' => '',
       'optional' => '',
@@ -623,7 +632,9 @@ function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state
       $control['next'] = array('ok' => $control['next']);
     }
     $control['next'] += array('error' => 'STOP');
-    drush_print("\n" . str_pad("", drush_get_context('DRUSH_COLUMNS', 80) - 2, ':'). "\n" . $state);
+    if (!$control['omit-stage-header']) {
+      drush_print("\n" . str_pad("", drush_get_context('DRUSH_COLUMNS', 80) - 2, ':'). "\n" . $state);
+    }
     foreach (array('description', 'optional', 'unnecessary', 'note') as $message_key) {
       if (!empty($control[$message_key])) {
         drush_print("\n" . _drush_upgrade_rewrap_msg($control[$message_key]));
@@ -655,7 +666,7 @@ function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state
     }
     if ($prompt_user) {
       if (!$control['callback']) {
-        if (empty($control['unnecessary'])) {
+        if (empty($control['unnecessary']) && !$control['no-op']) {
           drush_print(dt("\nDrush cannot do this step; you must perform it manually."));
           $selection_options += array(
             '#manual' => dt("I will do this step manually."),
@@ -716,23 +727,9 @@ function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state
       drush_print();
       return drush_set_error('DRUSH_UPGRADE_REQUIREMENT_FAILURE', dt("Verify function did not pass for a required step; aborting."));
     }
+    // Go on to the next stage of the FSM.
     if (array_key_exists($stage_result, $control['next'])) {
-      // If $control['next'][$stage_result] is an array, prompt the user
-      // and ask which step to do next; otherwise, the value is
-      // the next stage to go to.
       $state = $control['next'][$stage_result];
-      if (is_array($state)) {
-        $next_state_prompt = dt("What would you like to do?");
-        if (array_key_exists('#prompt', $state)) {
-          $next_state_prompt = $state['#prompt'];
-          unset($state['#prompt']);
-        }
-        drush_print();
-        $state = drush_choice($state, $next_state_prompt);
-        if (!$state) {
-          return drush_user_abort();
-        }
-      }
     }
     else {
       return drush_set_error('DRUSH_UPGRADE_STATE_MACHINE_ERROR', dt("Cannot continue; no next stage."));
