@@ -77,8 +77,8 @@ function upgrade_drush_command() {
  *
  * This function returns the stages of the finite state machine
  * that controls the major upgrade process.  The key of each item
- * in the stages array is the state name; the first state is always
- * START, and the last state is always STOP.
+ * in the stages array is the stage name; the first stage is always
+ * START, and the last stage is always STOP.
  *
  * The value of each item in the stages array is the control object.
  * The elements of the control object are as follows:
@@ -136,7 +136,7 @@ function upgrade_drush_command() {
  *      ),
  *
  *    The return value from the callback function is used to select the
- *    next state of the FSM to advance to.  TRUE is mapped to 'ok',
+ *    next stage of the FSM to advance to.  TRUE is mapped to 'ok',
  *    FALSE is mapped to 'error'.  Other return values are possible,
  *    provided that they align with an entry in the 'next' array.
  *
@@ -520,6 +520,7 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     'note' => 'Drush can also show you this information in the console via the `drush status-report` command.',
     'drush-command' => 'status-report',
+    'drush-site' => '@upgrade-target',
     'next' => 'UPGRADE.txt Major Upgrade Step 17',
   );
   $stages['UPGRADE.txt Major Upgrade Step 17'] = array(
@@ -733,14 +734,14 @@ function _drush_upgrade_rewrap_msg($msg) {
   return trim($msg);
 }
 
-function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state) {
-  $state = $initial_state;
+function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stage) {
+  $stage = $initial_stage;
   $fsm_context += array(
     'straightforward' => FALSE,
   );
-  while ($state != 'STOP') {
-    $fsm_context['stage'] = $state;
-    $control = $stages[$state];
+  while ($stage != 'STOP') {
+    $fsm_context['stage'] = $stage;
+    $control = $stages[$stage];
     $control += array(
       'omit-stage-header' => FALSE,
       'no-op' => FALSE,
@@ -769,7 +770,7 @@ function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state
     }
     $control['next'] += array('error' => 'STOP');
     if (!$control['omit-stage-header']) {
-      drush_print("\n" . str_pad("", drush_get_context('DRUSH_COLUMNS', 80) - 2, ':'). "\n" . $state);
+      drush_print("\n" . str_pad("", drush_get_context('DRUSH_COLUMNS', 80) - 2, ':'). "\n" . $stage);
     }
     foreach (array('description', 'optional', 'not-always-needed', 'unnecessary', 'note') as $message_key) {
       if (!empty($control[$message_key])) {
@@ -882,7 +883,7 @@ function _drush_upgrade_site_state_machine($fsm_context, $stages, $initial_state
     }
     // Go on to the next stage of the FSM.
     if (array_key_exists($stage_result, $control['next'])) {
-      $state = $control['next'][$stage_result];
+      $stage = $control['next'][$stage_result];
     }
     else {
       return drush_set_error('DRUSH_UPGRADE_STATE_MACHINE_ERROR', dt("Cannot continue; no next stage."));
