@@ -74,6 +74,15 @@ be in drush_choice when [ENTER] is pressed.  Usually, pressing
 [ENTER] at a site-upgrade command should just select the first
 option in the list.
 
+Refine Handling of Pre-upgrade Warning Messages
+-----------------------------------------------
+Right now, if there are warnings in the pre-upgrade messages, sup
+says "It is possible that the upgrade might fail".  Warning messages
+should be classified as 'post-processing needed', 'might fail',
+and so on, so this message is not displayed unless failure is actually
+possible.  The 'post-processing needed' messages should be repeated
+once the upgrade is finished.
+
 Test if contrib modules need updates
 ------------------------------------
 It would be helpful if we could sort out which contrib modules
