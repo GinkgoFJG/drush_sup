@@ -64,6 +64,14 @@ a makefile that will pull down specific versions of certain modules
 using any selection feature available in Drush make. Anything other than
 "from a folder" is probably a "wishlist" feature.
 
+Error checking on pm-enable
+---------------------------
+If pm-enable fails, the upgrade process should stop.  Alternately,
+we could remember which extensions we tried to upgrade, and move them
+to a "failed upgrade" list if they are still found in the list of
+extensions to be upgraded at the beginning of the next iteration.
+
+
 Wishlist Features:
 ==================
 
