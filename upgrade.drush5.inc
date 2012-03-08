@@ -51,6 +51,12 @@ function upgrade_drush_command() {
       'uninstall' => 'Comma-separated list of modules to uninstall prior to upgrade.',
     ),
   );
+  $items['site-upgrade-progress'] = array(
+    'description' => 'Show information about the upgrade status of the target site.',
+    'bootstrap' => 'DRUSH_BOOTSTRAP_DRUPAL_ROOT',
+    'aliases' => array('upgrade-progress', 'supp'),
+  );
+/*
   $items['site-upgrade-modules'] = array(
     'description' => 'Download, enable, and run updatedb on all contrib modules after an upgrade.  Called automatically by site-upgrade.',
     'hidden' => TRUE,
@@ -61,6 +67,7 @@ function upgrade_drush_command() {
       'projects' => 'The projects that must be downloaded to provide the specified module list.',
     ),
   );
+*/
   $items['docs-upgrading'] = array(
     'description' => 'Upgrading Drupal using the drush site-upgrade command.',
     'hidden' => TRUE,
@@ -404,10 +411,11 @@ function _drush_upgrade_site_upgrade_stages() {
 
             - Once the upgrade is done, \$update_free_access must be reverted to FALSE.
       ",
+    'straightforward' => TRUE,
     'note' => 'Note that Drush will copy your database and run updatedb on the copy.  The source database remains unchanged.',
     'drush-command' => 'updatedb',
     'drush-site' => '@upgrade-target',
-    'drush-backend-options' => array('integrate' => TRUE),
+    'drush-backend-options' => array('interactive' => TRUE),
     'next' => 'UPGRADE.txt Major Upgrade Step 14',
   );
   $stages['UPGRADE.txt Major Upgrade Step 14'] = array(
@@ -415,8 +423,8 @@ function _drush_upgrade_site_upgrade_stages() {
       "
         14. Backup your database after the core upgrade has run.
       ",
-    'callback' => '_drush_upgrade_site_backup_after_updatedb',
     'straightforward' => TRUE,
+    'callback' => '_drush_upgrade_site_backup_after_updatedb',
     'next' => 'UPGRADE.txt Major Upgrade Step 15',
   );
   $stages['UPGRADE.txt Major Upgrade Step 15'] = array(
@@ -480,6 +488,7 @@ function _drush_upgrade_site_upgrade_stages() {
       "
          5. Run update.php again (you should have run it once already when upgrading core) and check for any message output.
       ",
+    'straightforward' => TRUE,
     // TODO: It would be nifty if we could include a verify function that determined if the module needed any database updates.
     // This should probably be done up-front in step 15.
     'drush-command' => 'updatedb',
@@ -569,6 +578,26 @@ function upgrade_site_upgrade_complete() {
 }
 
 /**
+ * Give a report on the progress of an upgrade
+ */
+function drush_upgrade_site_upgrade_progress() {
+  $fsm_context = _drush_upgrade_load_fsm_context(drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT'));
+  if (array_key_exists('stage', $fsm_context)) {
+    drush_print("The current stage is " . $fsm_context['stage']);
+    drush_print("The following contrib extesnions still need to be upgraded: " . implode(',', $fsm_context['contrib_to_upgrade']));
+    drush_print("The following contrib extesnions have no available releases in the target version: " . implode(',', $fsm_context['unavailable_extensions']));
+    if (array_key_exists('module_to_upgrade', $fsm_context)) {
+      drush_print("The next module to upgrade is: " . $fsm_context['module_to_upgrade']);
+    }
+    drush_print("The project cache is at " . $fsm_context['project_cache']);
+    drush_print_r(array_keys($fsm_context));
+  }
+  else {
+    return drush_set_error('DRUSH_NO_UPGRADE_IN_PROGRESS', dt("There is no site upgrade in progress on the target site."));
+  }
+}
+
+/**
  * Do some sanity checks to make sure that we are ready to perform an upgrade, and
  * that the command is being called with reasonable-looking parameters.
  */
@@ -591,6 +620,16 @@ function drush_upgrade_site_upgrade_check_parameters($target_key = NULL) {
   }
 
   return TRUE;
+}
+
+function _drush_upgrade_load_fsm_context($destination_core) {
+  $fsm_context = array();
+  $cache_file = $destination_core. '/Drush-Upgrade-In-Progress-Context.serialized';
+  if (file_exists($cache_file)) {
+    $fsm_context = (array)unserialize(file_get_contents($cache_file));
+  }
+  $fsm_context['fsm_context_cache_file'] = $cache_file;
+  return $fsm_context;
 }
 
 /**
@@ -620,13 +659,16 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
     $fsm_context['target_alias'] = drush_sitealias_get_record($target_key);
     if (!empty($fsm_context['target_alias'])) {
       $fsm_context['destination_core'] = $fsm_context['target_alias']['root'];
-      $fsm_context['fsm_context_cache_file'] = $fsm_context['destination_core'] . '/Drush-Upgrade-In-Progress-Context.serialized';
 
       $fsm_context['destination_conf_path'] = conf_path();
       if (drush_get_option('force-sites-default')) {
         $fsm_context['destination_conf_path'] = 'sites/default';
       }
 
+      // Load the previous fsm context, if it exists.
+      $previous_fsm_context = _drush_upgrade_load_fsm_context($fsm_context['destination_core']);
+      $fsm_context['fsm_context_cache_file'] = $previous_fsm_context['fsm_context_cache_file'];
+      
       // Check to see if this is a restart of an earlier run
       // (maybe prompt about that), and restore the cached contexts
       // if it is.  We will look for a well-known file at the
@@ -636,13 +678,9 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
           'replace' => dt("Delete the existing site and start over."),
           'reuse' => dt("Re-use the existing code, re-import the database from the source site and run updatedb again."),
         );
-        $previous_fsm_context = array();
-        if (file_exists($fsm_context['fsm_context_cache_file'])) {
-          $previous_fsm_context = (array)unserialize(file_get_contents($fsm_context['fsm_context_cache_file']));
-        }
         // TODO:  validate that $previous_fsm_context is compatible with $fsm_context
         // and the upgrade has not completed.
-        if (!empty($previous_fsm_context) && array_key_exists('stage', $previous_fsm_context)) {
+        if (array_key_exists('stage', $previous_fsm_context)) {
           $options['resume'] = dt("Resume the upgrade at the stage it left off at: !stage", array('!stage' => $previous_fsm_context['stage']));
         }
         $selection = drush_choice($options, dt("A Drupal site exists at the destination. What would you like to do?"));
@@ -938,6 +976,8 @@ function _drush_upgrade_site_already_latest_version_drupal(&$fsm_context, $contr
 }
 
 function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$control) {
+  // Nothing selected yet; unset the module to upgrade from the previous iteration.
+  unset($fsm_context['module_to_upgrade']);
   // We will get a list of all of the enabled modules from the target site fresh every
   // time we get here, just in case something changed since last time.
   // TODO: maybe we could cache this info, and refresh it only if the user
@@ -960,6 +1000,10 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
   foreach ($fsm_context['contrib_to_upgrade'] as $extension) {
     if (!array_key_exists($extension, $fsm_context['unavailable_extensions'])) {
       $project = $fsm_context['extension_info'][$extension]->info['project'];
+      // Remap the project if it changed
+      if (array_key_exists($extension, $fsm_context['special_projects']['project-remap'])) {
+        $project = $fsm_context['special_projects']['project-remap'][$project];
+      }
       if (!is_dir($fsm_context['project_cache'] . '/' . $project)) {
         $projects_to_download[$project] = $project;
       }
@@ -978,25 +1022,42 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
   }
   // Make a list of extensions that still need to be upgraded
   $extensions_to_be_upgraded = array();
+  $dependencies_map = array();
+  $label_map = array();
   foreach ($fsm_context['contrib_to_upgrade'] as $extension) {
+    $project = $fsm_context['extension_info'][$extension]->info['project'];
+    // Remap the project if it changed
+    if (array_key_exists($extension, $fsm_context['special_projects']['project-remap'])) {
+      $project = $fsm_context['special_projects']['project-remap'][$project];
+    }
+    // Remap the extension if its name changed
+    if (array_key_exists($extension, $fsm_context['special_projects']['module-remap'])) {
+      $orig_name = $extension;
+      $extension = $fsm_context['special_projects']['module-remap'][$extension];
+      $label = dt("!origname (now renamed to !newname)", array('!origname' => $orig_name, '!newname' => $extension));
+      $label_map[$extension] = $label;
+    }
     // Only consider extensions that are not already enabled
     if (!array_key_exists($extension, $target_enabled_modules)) {
       // Only include extensions that have code available (in the project cache)
-      $project = $fsm_context['extension_info'][$extension]->info['project'];
       if (is_dir($fsm_context['project_cache'] . '/' . $project)) {
         $extensions_to_be_upgraded[$extension] = $extension;
+        // We could call drupal_parse_info_file directly, save for the fact that we are bootstrapped to the old version of Drupal, and would need to bootstrap the new site to use this. We will therefore use Drush's copy instead.
+        $info = drush_drupal_parse_info_file($fsm_context['project_cache'] . '/' . $project . '/' . $extension . '.info');
+        $dependencies_map[$extension] = array_key_exists('dependencies', $info) ? $info['dependencies'] : array();
       }
     }
   }
+  drush_print_r($extensions_to_be_upgraded);
   // If a given extension has any dependencies that are in the "to be upgraded" list,
   // then we will move it to the "not ready for upgrade" list.
   $extensions_ready_for_upgrade = array();
   $extensions_not_ready_for_upgrade = array();
   foreach ($extensions_to_be_upgraded as $extension) {
-    $info = $fsm_context['extension_info'][$extension];
     $readyForUpgrade = TRUE;
     $hasDependencies = FALSE;
-    foreach ($info->info['dependencies'] as $dependency) {
+    $dependencies = $dependencies_map[$extension];
+    foreach ($dependencies as $dependency) {
       $hasDependencies = TRUE;
       if (in_array($dependency, $extensions_to_be_upgraded)) {
         $readyForUpgrade = FALSE;
@@ -1005,18 +1066,22 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
     if ($readyForUpgrade) {
       // If $hasDependencies is false, then put this on the head of the list; otherwise, put it at the end.
       // This insures that we will order extensions without dependencies ahead of extensions with dependencies)
+      $key = $extension;
+      $label = $extension;
+      if (array_key_exists($extension, $label_map)) {
+        $label = $label_map[$extension];
+      }
       if ($hasDependencies) {
-        $extensions_ready_for_upgrade[] = $extension;
+        $extensions_ready_for_upgrade[$key] = $label; // . " (Deps: " . implode(',', $dependencies) . ")";
       }
       else {
-        array_unshift($extensions_ready_for_upgrade, $extension);
+        $extensions_ready_for_upgrade = array_merge(array($key => $label), $extensions_ready_for_upgrade);
       }
     }
     else {
       $extensions_not_ready_for_upgrade[] = $extension;
     }
   }
-  $extensions_ready_for_upgrade = array_combine($extensions_ready_for_upgrade, $extensions_ready_for_upgrade);
   // Add a 'note' about the extensions that need to be upgraded, but
   // are not yet ready.
   drush_print(dt("Note: in addition to the modules below, the following still need to be upgraded, but cannot be started until their dependencies are upgraded: ") . implode(',', $extensions_not_ready_for_upgrade));
@@ -1896,7 +1961,7 @@ function drush_upgrade_site_upgrade_modules() {
 
   // Run updatedb to update all of the contrib extensions.
   drush_log(dt('About to perform updatedb for extensions'), 'ok');
-  $result = drush_invoke_process('@self', 'updatedb', array(), array('yes' => TRUE) /*, array('interactive' => TRUE)*/);
+  $result = drush_invoke_process('@self', 'updatedb', array(), array('yes' => TRUE), array('interactive' => TRUE));
   if ($result === FALSE) {
     return drush_set_error('DRUSH_DRUPAL_CONTRIB_UPGRADE_FAILED', dt("The call to updatedb failed for the enabled contrib modules.  Try running site-upgrade again with '--uninstall={module list}' to remove all contrib extensions prior to upgrade.  Add modules back in until the problematic one is isolated.  Please report problems in the issue queue of the module that is causing problems."));
   }
