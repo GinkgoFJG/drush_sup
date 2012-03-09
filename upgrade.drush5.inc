@@ -740,18 +740,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   }
 
   // Collect information about the system before we begin.
-  // If we are resuming an upgrade operation in progress,
-  // then we will want to continue to use the information
-  // we gathered last time if we have already copied the
-  // database over to the target site.  If we have not
-  // copied the database yet, then, we will want to gather
-  // the information again just in case anything has changed
-  // in the source machine.
-  // TODO: Perhaps we could have a cli flag to supress
-  // rescranning cached information.
-  if (!array_key_exists('extension_info', $fsm_context) || ($fsm_context['target_database_version'] == 0)) {
-    drush_upgrade_gather_information($fsm_context);
-  }
+  drush_upgrade_gather_information($fsm_context);
 
   // Start up the FSM and run the upgrade
   _drush_upgrade_site_state_machine($fsm_context, $stages, $stage);
@@ -997,16 +986,45 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
     drush_mkdir($fsm_context['project_cache']);
   }
   $projects_to_download = array();
+  $contrib_to_upgrade = array();
+  $project_map = array();
+  $label_map = array();
   foreach ($fsm_context['contrib_to_upgrade'] as $extension) {
-    if (!array_key_exists($extension, $fsm_context['unavailable_extensions'])) {
-      $project = $fsm_context['extension_info'][$extension]->info['project'];
-      // Remap the project if it changed
-      if (array_key_exists($extension, $fsm_context['special_projects']['project-remap'])) {
+    if (!array_key_exists($extension, $fsm_context['unavailable_extensions']) && !array_key_exists($extension, $contrib_to_upgrade)) {
+      // There -must- be an entry for the extension in the extension_info
+      // data, because $extension is the pre-upgrade name of the extension,
+      // and the extension_info was built from the same source.
+      if (array_key_exists($extension, $fsm_context['extension_info'])) {
+        $project = $fsm_context['extension_info'][$extension]->info['project'];
+      }
+      else {
+        $project = $extension;
+        drush_log(dt("No project can be found for !extension", array('!extension' => $extension)), 'error');
+      }
+      // Remap the extension if its name changed
+      if (array_key_exists($extension, $fsm_context['special_projects']['module-remap'])) {
+        $orig_name = $extension;
+        $extension = $fsm_context['special_projects']['module-remap'][$extension];
+        $label = dt("!origname (now renamed to !newname)", array('!origname' => $orig_name, '!newname' => $extension));
+        $label_map[$extension] = $label;
+      }
+      // Relocate the extension to another project if it moved
+      if (array_key_exists($extension, $fsm_context['special_projects']['module-project-relocation'])) {
+        $project = $fsm_context['special_projects']['module-project-relocation'][$extension];     
+      }
+      // Remap the project if its name changed
+      elseif (array_key_exists($extension, $fsm_context['special_projects']['project-remap'])) {
         $project = $fsm_context['special_projects']['project-remap'][$project];
       }
-      if (!is_dir($fsm_context['project_cache'] . '/' . $project)) {
-        $projects_to_download[$project] = $project;
-      }
+    
+      $contrib_to_upgrade[] = $extension;
+      $project_map[$extension] = $project;
+    }
+  }
+  foreach ($contrib_to_upgrade as $extension) {
+    $project = $project_map[$extension];
+    if (!is_dir($fsm_context['project_cache'] . '/' . $project) && ($project != 'drupal')) {
+      $projects_to_download[$project] = $project;
     }
   }
   // If we haven't already downloaded everything on a previous iteration, grab them all now.
@@ -1023,20 +1041,8 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
   // Make a list of extensions that still need to be upgraded
   $extensions_to_be_upgraded = array();
   $dependencies_map = array();
-  $label_map = array();
-  foreach ($fsm_context['contrib_to_upgrade'] as $extension) {
-    $project = $fsm_context['extension_info'][$extension]->info['project'];
-    // Remap the project if it changed
-    if (array_key_exists($extension, $fsm_context['special_projects']['project-remap'])) {
-      $project = $fsm_context['special_projects']['project-remap'][$project];
-    }
-    // Remap the extension if its name changed
-    if (array_key_exists($extension, $fsm_context['special_projects']['module-remap'])) {
-      $orig_name = $extension;
-      $extension = $fsm_context['special_projects']['module-remap'][$extension];
-      $label = dt("!origname (now renamed to !newname)", array('!origname' => $orig_name, '!newname' => $extension));
-      $label_map[$extension] = $label;
-    }
+  foreach ($contrib_to_upgrade as $extension) {
+    $project = $project_map[$extension];
     // Only consider extensions that are not already enabled
     if (!array_key_exists($extension, $target_enabled_modules)) {
       // Only include extensions that have code available (in the project cache)
@@ -1076,7 +1082,7 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
         $label = $label_map[$extension];
       }
       if ($hasDependencies) {
-        $extensions_ready_for_upgrade[$key] = $label; // . " (Deps: " . implode(',', $dependencies) . ")";
+        $extensions_ready_for_upgrade[$key] = $label . " (Deps: " . implode(',', $dependencies) . ")";
       }
       else {
         $extensions_ready_for_upgrade = array_merge(array($key => $label), $extensions_ready_for_upgrade);
@@ -1335,17 +1341,23 @@ function drush_upgrade_gather_information(&$fsm_context) {
   drush_print();
   drush_print(dt("Gathering information about core and contrib modules..."));
 
-  $fsm_context['extension_info'] = drush_get_extensions();
+  // Refresh the extension info every time until the database is
+  // sync'ed to the target site. After that point, the extension info
+  // is frozen, as changes to the source site will no longer affect the
+  // target site.
+  if (!array_key_exists('extension_info', $fsm_context) || ($fsm_context['target_database_version'] == 0)) {
+    $fsm_context['extension_info'] = drush_get_extensions();
 
-  // Get a list of enabled contrib extensions.
-  $values = drush_invoke_process('@self', 'pm-list', array(), array('status'=>'enabled','no-core'=>TRUE), array('integrate' => FALSE, 'override-simulated' => TRUE));
-  if ($values['error_status'] != 0) return FALSE;
-  $fsm_context['contrib_extensions'] = array_keys($values['object']);
+    // Get a list of enabled contrib extensions in source site.
+    $values = drush_invoke_process('@self', 'pm-list', array(), array('status'=>'enabled','no-core'=>TRUE), array('integrate' => FALSE, 'override-simulated' => TRUE));
+    if ($values['error_status'] != 0) return FALSE;
+    $fsm_context['contrib_extensions'] = array_keys($values['object']);
 
-  // Get a list of enabled core extensions.
-  $values = drush_invoke_process('@self', 'pm-list', array(), array('status'=>'enabled','core'=>TRUE), array('integrate' => FALSE, 'override-simulated' => TRUE));
-  if ($values['error_status'] != 0) return FALSE;
-  $fsm_context['core_extensions'] = array_keys($values['object']);
+    // Get a list of enabled core extensions in source site.
+    $values = drush_invoke_process('@self', 'pm-list', array(), array('status'=>'enabled','core'=>TRUE), array('integrate' => FALSE, 'override-simulated' => TRUE));
+    if ($values['error_status'] != 0) return FALSE;
+    $fsm_context['core_extensions'] = array_keys($values['object']);
+  }
 
   // Make a list of modules that are not available to be enabled in the target
   // version of Drupal, either because they have not been ported yet, or because
@@ -1901,9 +1913,43 @@ function drush_upgrade_project_map($target_version) {
         // 'date' project is still contrib, but date_timezone, one of its modules, has moved to core. See http://drupal.org/node/868028.
         'date_timezone',
       ),
+      // If a project changes name, then an entry
+      // 'oldprojectname' => 'newprojectname' should be placed in this map.
+      // 'project-remap' should only be used if the extensions in the project
+      // all exist with the same name in the new project name.  If modules change
+      // name, hten 'module-remap' and 'module-project-relocation' should be
+      // used instead.
       'project-remap' => array(),
+      // If an extension changes name, then an entry
+      // 'oldmodulename' => 'newmodulename' should be placed in this map.
+      // By default, it is assumed that the new module name exists in the
+      // same project as before.  If this is not the case, then an entry
+      // in the 'module-project-relocation' array should also be used.
       'module-remap' => array(
         'content' => 'cck',
+        'content_copy' => 'bundle_copy',
+        'content_permissions' => 'field_permissions',
+        'fieldgroup' => 'field_group',
+        // TODO: nodereference and userreference could optionally be migrated to entityreference. Which has the better upgrade path?
+        'nodereference' => 'node_reference',
+        'userreference' => 'user_reference',
+        'views_export' => 'bulk_export',
+        'optionwidgets' => 'options',
+      ),
+      // The module-project-relocation array can be used to record modules
+      // that moved to a new project in Drupal 7.  Entries should be in
+      // the form 'modulename' => 'newprojectname'.  The module name should
+      // be the -new- module name for modules that appear in the module-remap
+      // array, or the existing module names for modules that did not change name.
+      'module-project-relocation' => array(
+        'bundle_copy' => 'bundle_copy',
+        'field_permissions' => 'field_permissions',
+        'field_group' => 'field_group',
+        'node_reference' => 'reference',
+        'user_reference' => 'reference',
+        'entityreference' => 'entityreference',
+        'bulk_export' => 'ctools',
+        'options' => 'drupal',
       ),
       'warning' => array(
         'token' => dt('In Drupal 7, the contrib token module handles UI, as well as field and profile tokens; all other functionality has been migrated to core.'),
