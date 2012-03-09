@@ -480,7 +480,7 @@ function _drush_upgrade_site_upgrade_stages() {
          4. Enable the module
       ",
     'straightforward' => TRUE,
-    'prepare' => '_drush_site_upgrade_enable_module',
+    'callback' => '_drush_site_upgrade_enable_module',
     'next' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 5',
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 5'] = array(
@@ -1021,6 +1021,7 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
       $project_map[$extension] = $project;
     }
   }
+  $fsm_context['project_map'] = $project_map;
   foreach ($contrib_to_upgrade as $extension) {
     $project = $project_map[$extension];
     if (!is_dir($fsm_context['project_cache'] . '/' . $project) && ($project != 'drupal')) {
@@ -1128,7 +1129,7 @@ function _drush_site_upgrade_prepare_module_upgrade(&$fsm_context, &$control) {
 function _drush_site_upgrade_show_module_upgrade_txt(&$fsm_context, &$control) {
   // TODO: the UPGRADE.txt for views is D7UPGRADE.txt
   $extension = $fsm_context['module_to_upgrade'];
-  $project = $fsm_context['extension_info'][$extension]->info['project'];
+  $project = $fsm_context['project_map'][$extension];
   $upgrade_txt = $fsm_context['project_cache'] . '/' . $project . '/UPGRADE.txt';
   if (is_file($upgrade_txt)) {
     $control['note'] = file_get_contents($upgrade_txt);
@@ -1145,7 +1146,7 @@ function _drush_site_upgrade_show_module_upgrade_txt(&$fsm_context, &$control) {
 function _drush_site_upgrade_show_module_location(&$fsm_context, &$control) {
   $destination_core = $fsm_context['destination_core'];
   $extension = $fsm_context['module_to_upgrade'];
-  $project = $fsm_context['extension_info'][$extension]->info['project'];
+  $project = $fsm_context['project_map'][$extension];
   // TODO: Reconcile with code below
   $src = $fsm_context['project_cache'] . '/' . $project;
   $dest = $destination_core . '/sites/all/modules/' . $project;
@@ -1158,7 +1159,7 @@ function _drush_site_upgrade_show_module_location(&$fsm_context, &$control) {
 function _drush_site_upgrade_verify_module_code_exists(&$fsm_context, &$control) {
   $destination_core = $fsm_context['destination_core'];
   $extension = $fsm_context['module_to_upgrade'];
-  $project = $fsm_context['extension_info'][$extension]->info['project'];
+  $project = $fsm_context['project_map'][$extension];
   $dest = $destination_core . '/sites/all/modules/' . $project;
   // TODO: We should validate that the directory at $dest is actually the right
   // version of the desired module (at least insure that the Drupal major verison matches).
@@ -1172,7 +1173,7 @@ function _drush_site_upgrade_get_module_code(&$fsm_context, &$control) {
   // TODO: if we haven't fetched this project already, then fetch it and mark it as already fetched.
   $destination_core = $fsm_context['destination_core'];
   $extension = $fsm_context['module_to_upgrade'];
-  $project = $fsm_context['extension_info'][$extension]->info['project'];
+  $project = $fsm_context['project_map'][$extension];
   // TODO: Kind of a bummer that we're going to need to reproduce logic in pm-download to
   // put modules and themes in the right location. Maybe there's a better way to do this?
   $src = $fsm_context['project_cache'] . '/' . $project;
@@ -1183,9 +1184,17 @@ function _drush_site_upgrade_get_module_code(&$fsm_context, &$control) {
 
 function _drush_site_upgrade_enable_module(&$fsm_context, &$control) {
   $control['drush-command'] = 'pm-enable';
-  $control['drush-site'] = '@upgrade-target';
+  $control['drush-site'] = $fsm_context['target_key'];
   $control['drush-arguments'] = array($fsm_context['module_to_upgrade']);
+  $control['drush-options'] = array();
   $control['drush-backend-options'] = array('integrate' => TRUE);
+
+  $result = drush_invoke_process($control['drush-site'], $control['drush-command'], $control['drush-arguments'], $control['drush-options'], $control['drush-backend-options']);
+  $module_was_enabled = is_array($result['object']) && array_key_exists($fsm_context['module_to_upgrade'], $result['object']);
+  // TODO: By returning FALSE here, we cause the upgrade to stop.  It would be better to
+  // add this module to a list of 'problematic projects', and continue to upgrade other modules.
+  // There needs to be a way for the user to retry problematic modules.
+  return ($result['error_status'] == 0) && $module_was_enabled;  
 }
 
 function _drush_upgrade_site_download_next_version_drupal(&$fsm_context, $control) {
