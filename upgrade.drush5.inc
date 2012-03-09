@@ -481,7 +481,10 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     'straightforward' => TRUE,
     'callback' => '_drush_site_upgrade_enable_module',
-    'next' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 5',
+    'next' => array(
+      'ok' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 5',
+      'error' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Enable Errors',
+    ),
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 5'] = array(
     'description' =>
@@ -513,6 +516,18 @@ function _drush_upgrade_site_upgrade_stages() {
          If you have a Drupal 7 version of the theme you were using for Drupal 6, place it in sites/all/themes/ and reenable it.
       ",
     'next' => 'UPGRADE.txt Major Upgrade Step 16',
+  );
+  $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Enable Errors'] = array(
+    'description' =>
+      "
+        If you have errors when you attempt to enable a module:
+
+        Note any error messages you see.
+        Check to see if perhaps Drush simply could not find the module; this can happen if a module
+        is moved to another project.  If this happens, you can manually download the new project and
+        Drush will automatically recover.
+      ",
+    'next' => 'UPGRADE.txt Major Upgrade Step 15',
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Update Errors'] = array(
     'description' =>
@@ -589,6 +604,13 @@ function drush_upgrade_site_upgrade_progress() {
     if (array_key_exists('module_to_upgrade', $fsm_context)) {
       drush_print("The next module to upgrade is: " . $fsm_context['module_to_upgrade']);
     }
+    if (!empty($fsm_context['extensions_with_problems'])) {
+      drush_print("The following contrib extesnions had problems: ");
+      foreach ($fsm_context['extensions_with_problems'] as $extension => $info) {
+        $message = $info['message'];
+        drush_print("   $extension: $message");
+      }
+    }
     drush_print("The project cache is at " . $fsm_context['project_cache']);
     drush_print_r(array_keys($fsm_context));
   }
@@ -648,11 +670,6 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   $fsm_context['target_version'] = $fsm_context['source_version'] + 1;
   $fsm_context['target_key'] = $target_key;
   $fsm_context['fsm_context_cache_file'] = FALSE;
-  // TODO: we could probably determine the version of the database by inspectiion (e.g. has node_update_7000 run?)
-  // However, we should probably also keep track of what version we think the target database file -should- be,
-  // even if we use inspection on the current db, so we know if the active db is in sync with the stage of the
-  // upgrade process we think we are in.
-  $fsm_context['target_database_version'] = 0; // No database exists -- until we copy it. Then we will set this to source_version. After updatedb, we set it to target_version.
   $fsm_context['uninstall_extensions'] = drush_get_option('uninstall', '');
   $fsm_context['core-only'] = drush_get_option('core-only', FALSE);
   if (isset($target_key)) {
@@ -669,20 +686,16 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
       $previous_fsm_context = _drush_upgrade_load_fsm_context($fsm_context['destination_core']);
       $fsm_context['fsm_context_cache_file'] = $previous_fsm_context['fsm_context_cache_file'];
       
-      // Check to see if this is a restart of an earlier run
-      // (maybe prompt about that), and restore the cached contexts
-      // if it is.  We will look for a well-known file at the
-      // destination root directory.
+      // If a site already exists at the destination, ask the user what to do.
       if (is_dir($fsm_context['destination_core'])) {
-        $options = array(
-          'replace' => dt("Delete the existing site and start over."),
-          'reuse' => dt("Re-use the existing code, re-import the database from the source site and run updatedb again."),
-        );
         // TODO:  validate that $previous_fsm_context is compatible with $fsm_context
         // and the upgrade has not completed.
         if (array_key_exists('stage', $previous_fsm_context)) {
           $options['resume'] = dt("Resume the upgrade at the stage it left off at: !stage", array('!stage' => $previous_fsm_context['stage']));
         }
+        $options['reuse'] = dt("Re-use the existing code: re-import the database from the source site and update core and contrib modules again.");
+        $options['replace'] = dt("Delete the existing target: start over from the beginning.");
+       
         $selection = drush_choice($options, dt("A Drupal site exists at the destination. What would you like to do?"));
         switch ($selection) {
           case 'replace':
@@ -705,6 +718,15 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   // of what might have been cached in the previous fsm context file.
   $fsm_context['straightforward'] = drush_get_option('do-straightforward', FALSE);
   $fsm_context['skip-optional'] = drush_get_option('skip-optional', $fsm_context['straightforward']);
+  
+  $fsm_context += array(
+    // TODO: we could probably determine the version of the database by inspectiion (e.g. has node_update_7000 run?)
+    // However, we should probably also keep track of what version we think the target database file -should- be,
+    // even if we use inspection on the current db, so we know if the active db is in sync with the stage of the
+    // upgrade process we think we are in.
+    'target_database_version' => 0, // No database exists -- until we copy it. Then we will set this to source_version. After updatedb, we set it to target_version.
+    'extensions_with_problems' => array(),
+  );
 
   // TODO: Look up appropriate upgrade stages for the version of Drupal being upgraded.
   $stages = _drush_upgrade_site_upgrade_stages();
@@ -1093,6 +1115,21 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
       $extensions_not_ready_for_upgrade[] = $extension;
     }
   }
+  // Filter out extensions that had problems on a previous pass
+  $extensions_without_problems = array();
+  $extensions_with_problems = array();
+  foreach ($extensions_ready_for_upgrade as $extension => $label) {
+    if (!array_key_exists($extension, $fsm_context['extensions_with_problems'])) {
+      $extensions_without_problems[$extension] = $label;
+    }
+    else {
+      $extensions_with_problems[$extension] = $label . ' [[' . $fsm_context['extensions_with_problems'][$extension]['message'] . ']]';
+    }
+  }
+  // TODO:  If $extensions_without_problems is empty, then unset 'auto' mode.
+  // We will allow the user to select from modules that have not failed AND also retry
+  // modules that have failed, if desired, but we will put the problem extensions on the end.
+  $extensions_ready_for_upgrade = array_merge($extensions_without_problems, $extensions_with_problems);
   // Add a 'note' about the extensions that need to be upgraded, but
   // are not yet ready.
   drush_print(dt("Note: in addition to the modules below, the following still need to be upgraded, but cannot be started until their dependencies below are upgraded: ") . implode(',', $extensions_not_ready_for_upgrade));
@@ -1190,11 +1227,17 @@ function _drush_site_upgrade_enable_module(&$fsm_context, &$control) {
   $control['drush-backend-options'] = array('integrate' => TRUE);
 
   $result = drush_invoke_process($control['drush-site'], $control['drush-command'], $control['drush-arguments'], $control['drush-options'], $control['drush-backend-options']);
+  var_export($result['object']);
   $module_was_enabled = is_array($result['object']) && array_key_exists($fsm_context['module_to_upgrade'], $result['object']);
   // TODO: By returning FALSE here, we cause the upgrade to stop.  It would be better to
   // add this module to a list of 'problematic projects', and continue to upgrade other modules.
   // There needs to be a way for the user to retry problematic modules.
-  return ($result['error_status'] == 0) && $module_was_enabled;  
+  if (!$module_was_enabled) {
+    // TODO: Should we manage multiple failures in any way here?
+    $fsm_context['extensions_with_problems'][$fsm_context['module_to_upgrade']] = array('message' => dt("Error: failed to enable."));
+    return FALSE;
+  }
+  return TRUE;  
 }
 
 function _drush_upgrade_site_download_next_version_drupal(&$fsm_context, $control) {
@@ -1954,8 +1997,8 @@ function drush_upgrade_project_map($target_version) {
         'bundle_copy' => 'bundle_copy',
         'field_permissions' => 'field_permissions',
         'field_group' => 'field_group',
-        'node_reference' => 'reference',
-        'user_reference' => 'reference',
+        'node_reference' => 'references',
+        'user_reference' => 'references',
         'entityreference' => 'entityreference',
         'bulk_export' => 'ctools',
         'options' => 'drupal',
