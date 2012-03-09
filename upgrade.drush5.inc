@@ -1041,14 +1041,18 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
     if (!array_key_exists($extension, $target_enabled_modules)) {
       // Only include extensions that have code available (in the project cache)
       if (is_dir($fsm_context['project_cache'] . '/' . $project)) {
-        $extensions_to_be_upgraded[$extension] = $extension;
         // We could call drupal_parse_info_file directly, save for the fact that we are bootstrapped to the old version of Drupal, and would need to bootstrap the new site to use this. We will therefore use Drush's copy instead.
-        $info = drush_drupal_parse_info_file($fsm_context['project_cache'] . '/' . $project . '/' . $extension . '.info');
-        $dependencies_map[$extension] = array_key_exists('dependencies', $info) ? $info['dependencies'] : array();
+        $info = drush_site_upgrade_parse_info_file($fsm_context['project_cache'] . '/' . $project, $extension);
+        if (!empty($info)) {
+          $dependencies_map[$extension] = array_key_exists('dependencies', $info) ? $info['dependencies'] : array();
+          $extensions_to_be_upgraded[$extension] = $extension;
+        }
+        else {
+          drush_log(dt("No .info file could be found for !extension", array('!extension' => $extension)), 'warning');
+        }
       }
     }
   }
-  drush_print_r($extensions_to_be_upgraded);
   // If a given extension has any dependencies that are in the "to be upgraded" list,
   // then we will move it to the "not ready for upgrade" list.
   $extensions_ready_for_upgrade = array();
@@ -1084,7 +1088,7 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
   }
   // Add a 'note' about the extensions that need to be upgraded, but
   // are not yet ready.
-  drush_print(dt("Note: in addition to the modules below, the following still need to be upgraded, but cannot be started until their dependencies are upgraded: ") . implode(',', $extensions_not_ready_for_upgrade));
+  drush_print(dt("Note: in addition to the modules below, the following still need to be upgraded, but cannot be started until their dependencies below are upgraded: ") . implode(',', $extensions_not_ready_for_upgrade));
   $control['selection-options'] = $extensions_ready_for_upgrade;
   if (empty($extensions_to_be_upgraded)) {
     $control['prompt'] = dt("There are no more modules to be upgraded.");
@@ -1094,6 +1098,20 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
     $control['prompt'] = dt("Please select a module to upgrade, or some other action below:");
     $control['selection-options']['#done'] = dt("Finish upgrade, leaving remaining modules un-upgraded");
   }
+}
+
+/**
+ * Find the info file and parse it
+ */
+function drush_site_upgrade_parse_info_file($project_dir, $extension) {
+  $files = drush_scan_directory($project_dir, '/' . $extension . '\.info/', array('.', '..', 'CVS'));
+  if (empty($files)) {
+    return array();
+  }
+  $info_file = array_shift(array_keys($files));
+  // We could call drupal_parse_info_file directly, save for the fact that we are bootstrapped to the old version of Drupal, and would need to bootstrap the new site to use this. We will therefore use Drush's copy instead.
+  $info = drush_drupal_parse_info_file($info_file);
+  return $info;
 }
 
 function _drush_site_upgrade_prepare_module_upgrade(&$fsm_context, &$control) {
