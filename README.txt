@@ -155,14 +155,15 @@ after the upgrade completes.
 Things I did Manually After My Site Upgrade
 ===========================================
 
-drush rsync @wk.dev:%files @wk.d7:%files
-drush @wk.d7 en bartik seven
-drush @wk.d7 vset theme_default 'bartik' # no point in doing this
-drush @wk.d7 vset admin_theme 'seven'
+drush rsync @wk.dev:%files @wk.d7dev:%files
+drush @wk.d7dev en bartik seven
+drush @wk.d7dev vset theme_default 'bartik' # no point in doing this
+drush @wk.d7dev vset admin_theme 'seven'
 cp -R /srv/www/dev.westkingdom.org/sites/all/themes/wk_zen2/css/wk_img/ /srv/www/d7.westkingdom.org/sites/default/files/
-drush @wk.d7 en toolbar
-drush @wk.d7 en shortcut
-drush @wk.d7 en contextual
-drush @wk.d7 sqlq "DELETE FROM drupal_menu_links WHERE module = 'system';"
-drush @wk.d7 cc all
+drush @wk.d7dev en toolbar
+drush @wk.d7dev en shortcut
+drush @wk.d7dev en contextual
+drush @wk.d7dev sqlq "DELETE FROM drupal_menu_links WHERE module = 'system';"
+drush @wk.d7dev cc all
+drush @wk.d7dev en content_migrate
 
