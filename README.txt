@@ -64,23 +64,16 @@ a makefile that will pull down specific versions of certain modules
 using any selection feature available in Drush make. Anything other than
 "from a folder" is probably a "wishlist" feature.
 
-Error checking on pm-enable
----------------------------
-If pm-enable fails, the upgrade process should stop.  Alternately,
-we could remember which extensions we tried to upgrade, and move them
-to a "failed upgrade" list if they are still found in the list of
-extensions to be upgraded at the beginning of the next iteration.
-
+Error checking on updatedb
+--------------------------
+If pm-enable fails, the module is added to a "problems" list and
+processing on it until later.  The same should be done when a
+module's updatedb fails. To recover from this, though, would require
+restoring the site from the last backup point.
 
 Wishlist Features:
 ==================
 
-Default selection for drush_choice
-----------------------------------
-Drush should allow us to select what the default option should
-be in drush_choice when [ENTER] is pressed.  Usually, pressing
-[ENTER] at a site-upgrade command should just select the first
-option in the list.
 
 Refine Handling of Pre-upgrade Warning Messages
 -----------------------------------------------
@@ -134,13 +127,6 @@ Set "Seven" as the Admin Theme
 ------------------------------
 Cli option --seven to set the admin theme?  Code will already do this if "Seven"
 is your admin theme on D6.
-
-Module Remapping
-----------------
-It would be helpful to maintain a list of contrib modules whose functionality
-can be replaced with different modules in D7.  For example, views_export
-is part of views in D6, but does not exist in D7. Is views_data_export a
-suitable replacement?
 
 Upgrade Completion Report
 -------------------------
