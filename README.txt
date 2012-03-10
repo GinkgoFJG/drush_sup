@@ -1,36 +1,40 @@
-Development Plan:
-=================
+Overview of Upgrade Procedure:
+==============================
 
-1. The site-upgrade command needs to conform very closely to the module 
+1. The Drush site-upgrade command conforms very closely to the module 
    upgrade procedure described at http://drupal.org/node/948216 
-   (step 15 of UPGRADE.txt). In the previous version of site-upgrade,
-   all contrib modules were replaced, enabled and updated at the same time; 
-   this rarely works.  The new version of site-upgrade will enable and
-   update contrib modules one at a time.  No module will be updated until
-   all of the modules it depends on have been successfully updated.
+   (step 15 of UPGRADE.txt). Modules are enabled and updated in order,
+   one at a time.  No module is be updated until all of the modules it 
+   depends on have been successfully updated.
 
-2. The site-upgrade command is now implemented as a finite state machine.
+2. The site-upgrade command is implemented as a finite state machine.
    Each state clearly describes what it is doing, and the states follow the 
-   stages of UPGRADE.txt nearly exactly.
+   stages of UPGRADE.txt nearly exactly.  One important difference is
+   that UPGRADE.txt instructs you to upgrade a site in place, whereas
+   Drush will copy the source site to a new site during the upgrade.
+   Because of this, some steps happen in a slightly different order than
+   described in UPGRADE.txt.  All differences are explained in the
+   explanitory text of the upgrade stages.
+   
+3. If you run with the flag --confirm-all, then every stage will prompt 
+   for what action to take.  If a situation that Drush cannot handle
+   is encountered, it is possible to pause the upgrade (select "Cancel"
+   at any prompt), fix the problem manually, and then continue the upgrade
+   again from where it last left off.
 
-3. During the upgrade, you are able to review and confirm each step of the 
-   process before it runs. Confirmations can be turned off for the 
-   straightforward stages, or for all stages if desired.
-
-4. If you stop the upgrade at any point (or if it aborts due to a failure), 
-   you will be able to re-run the site-upgrade command again and pick up where 
-   you left off.
-
-5. Any step of the upgrade process that successfully completes an updatedb 
+4. Any step of the upgrade process that successfully completes an updatedb 
    will automatically save a backup copy of the partially upgraded site's 
-   code and database using the archive-dump command. You will also be able 
-   to easily resume the upgrade from any backup point.
+   code and database using the archive-dump command. Two backups are maintained
+   during the lifetime of the upgrade command--one after Drupal core is
+   updated, and one after the most recent successful module update.
+   [NOT IMPLEMENTED YET]
 
-6. If you complete the upgrade process (or decide not to continue mid-way 
-   through), you will be able to start over at the beginning at any time and 
-   re-use any code modifications you made to the running site.
+5. If the source site is changed, you may restart the site-upgrade from the
+   beginning, and copy and update the modified database.  You may opt to keep
+   any code modifications you made during the previous upgrade.
+   [NOT IMPLEMENTED YET]
 
-This is all working now, except as noted below.
+
 
 Important To-Do Items:
 ======================
@@ -44,7 +48,7 @@ in new modules as needed.  It is therefore necessary for Drush to
 copy the `files` directory to the new site at some point. Are there
 other assets that must be copied?
 
-Automatic Backup (#5 above)
+Automatic Backup (#4 above)
 ----------------
 The database and files should be automatically archived after every
 updatedb.
@@ -55,7 +59,7 @@ When re-running site-upgrade after an abort or failure, Drush should
 provide a list of all backups made, + the stage they were made at, and
 give the user the option to resume from any backup point.
 
-Tell Drush Where to get Module Files (#6 above)
+Tell Drush Where to get Module Files (#5 above)
 ------------------------------------
 It should be possible to tell Drush to get modules from some other
 source than pm-download, e.g. from a local git repository, from
@@ -70,6 +74,7 @@ If pm-enable fails, the module is added to a "problems" list and
 processing on it until later.  The same should be done when a
 module's updatedb fails. To recover from this, though, would require
 restoring the site from the last backup point.
+
 
 Wishlist Features:
 ==================
