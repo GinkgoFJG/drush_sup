@@ -24,8 +24,8 @@ function upgrade_drush_command() {
       'drush site-upgrade @onward' => 'Upgrade from the current site to the site specified by @onward alias.',
     ),
     'options' => array(
-      'do-straightforward' => 'Run all of the straightforward steps automatically; only prompt at important steps.  Implies --skip-optional.',
-      'skip-optional' => 'Never prompt for optional steps; just skip them.',
+      'confirm-all' => 'Usually, Drush site-upgrade will run all of the straightforward steps automatically, and only prompts at "important" steps.  --confirm-all forces prompts at every step.',
+      'skip-optional' => 'Never prompt for optional steps; just skip them. This is the default; --skip-optional is only necessary with --confirm-all.',
       'auto' => 'Automatically select the most reasonable choice at each prompt, when one is available.',
       'structure-tables-key' => 'A key in the structure-tables array. @see example.drushrc.php. Defaults to \'common\'.',
       'source-dump' => 'Path to dump file. Medium or large sized sites should set this. Optional; default is to create a temporary file.',
@@ -719,6 +719,8 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
       // Load the previous fsm context, if it exists.
       $previous_fsm_context = _drush_upgrade_load_fsm_context($fsm_context['destination_core']);
       $fsm_context['fsm_context_cache_file'] = $previous_fsm_context['fsm_context_cache_file'];
+      // If the user explicitly specified a stage to start at, then force
+      // a 'resume'.
       if (!empty($stage)) {
         $fsm_context = $previous_fsm_context;
       }
@@ -753,7 +755,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   // These flags always take on the value reflected by the cli options, regardless
   // of what might have been cached in the previous fsm context file.
   $fsm_context['auto'] = drush_get_option('auto', FALSE);
-  $fsm_context['straightforward'] = drush_get_option('do-straightforward', $fsm_context['auto']);
+  $fsm_context['straightforward'] = !drush_get_option('confirm-all', !$fsm_context['auto']);
   $fsm_context['skip-optional'] = drush_get_option('skip-optional', $fsm_context['straightforward']);
 
   // Erase the 'download_attempts' variable on each run
