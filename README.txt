@@ -32,7 +32,6 @@ Overview of Upgrade Procedure:
 5. If the source site is changed, you may restart the site-upgrade from the
    beginning, and copy and update the modified database.  You may opt to keep
    any code modifications you made during the previous upgrade.
-   [NOT IMPLEMENTED YET]
 
 
 

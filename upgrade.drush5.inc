@@ -187,8 +187,9 @@ function upgrade_drush_command() {
  *  - straightforward:
  *
  *    This step does not take much thought or consideration on the part
- *    of the user.  Straightforward steps can be run automatically
- *    (without prompting) with the --do-straightforward option.
+ *    of the user.  Straightforward steps are by default run automatically
+ *    (without prompting).  They will be prompted if --confirm-all is
+ *    selected.
  *
  */
 function _drush_upgrade_site_upgrade_stages() {
@@ -343,6 +344,7 @@ function _drush_upgrade_site_upgrade_stages() {
             from http://drupal.org using your web browser, extract it, and then use an
             FTP client to upload the files to your web root.
       ",
+    // TODO: If running in "reuse" mode, notify the user that Drupal is already in place, and skip this step. As it is, this step will seem to run, but will do nothing.
     'callback' => '_drush_upgrade_site_download_next_version_drupal',
     'straightforward' => TRUE,
     'next' => 'UPGRADE.txt Major Upgrade Step 11',
@@ -550,6 +552,22 @@ function _drush_upgrade_site_upgrade_stages() {
     'note' => 'Drush can also show you this information in the console via the `drush status-report` command.',
     'drush-command' => 'status-report',
     'drush-site' => '@upgrade-target',
+    'next' => 'Post-upgrade Step A',
+  );
+  $stages['Post-upgrade Step A'] = array(
+    'description' =>
+      "
+        A. Copy files directory from the source site to the upgrade site.
+      ",
+    'callback' => '_drush_site_upgrade_copy_files',
+    'next' => 'Post-upgrade Step B',
+  );
+  $stages['Post-upgrade Step B'] = array(
+    'description' =>
+      "
+        A. Enable the core module content_migrate.
+      ",
+    'callback' => '_drush_site_upgrade_enable_content_migrate',
     'next' => 'UPGRADE.txt Major Upgrade Step 17',
   );
   $stages['UPGRADE.txt Major Upgrade Step 17'] = array(
@@ -707,6 +725,11 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   $fsm_context['uninstall_extensions'] = drush_get_option('uninstall', '');
   $fsm_context['core-only'] = drush_get_option('core-only', FALSE);
   if (isset($target_key)) {
+    if (!array_key_exists('project_cache', $fsm_context)) {
+      // TODO: Generate a better name for the Drush site-upgrade project download cache
+      $fsm_context['project_cache'] = '/tmp/drush-upgrade';
+      drush_mkdir($fsm_context['project_cache']);
+    }
     $fsm_context['target_alias'] = drush_sitealias_get_record($target_key);
     if (!empty($fsm_context['target_alias'])) {
       $fsm_context['destination_core'] = $fsm_context['target_alias']['root'];
@@ -731,7 +754,9 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
         if (array_key_exists('stage', $previous_fsm_context)) {
           $options['resume'] = dt("Resume the upgrade at the stage it left off at: !stage", array('!stage' => $previous_fsm_context['stage']));
         }
-        $options['reuse'] = dt("Re-use the existing code: re-import the database from the source site and update core and contrib modules again.");
+        if (is_dir($fsm_context['destination_core'])) {
+          $options['reuse'] = dt("Re-use the existing code: re-import the database from the source site and update core and contrib modules again.");
+        }
         $options['replace'] = dt("Delete the existing target: start over from the beginning.");
        
         $selection = drush_choice($options, dt("A Drupal site exists at the destination. What would you like to do?"));
@@ -744,8 +769,20 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
             $stage = $fsm_context['stage'];
             break;
           case 'reuse':
-            drush_print("Re-use not implemented.");
-            //break;
+            // Move every project from the destination site's sites/all/modules and sites/all/themes directory
+            // into the project cache.  TODO:  Maybe we should put the saved files somewhere else.
+            foreach (array('sites/all/modules', 'sites/all/themes') as $dir) {
+              $scan_dir = $fsm_context['destination_core'] . '/' . $dir;
+              $projects = drush_scan_directory($scan_dir, '/./', array('.', '..', 'CVS'), 0, 0);
+              foreach ($projects as $project_path => $info) {
+                $target_dir = $fsm_context['project_cache'] . '/' . basename($project_path);
+                if (is_dir($target_dir)) {
+                  drush_delete_dir($target_dir, TRUE);
+                }
+                rename($project_path, $target_dir);
+              }
+            }
+            break;
           default:
             return drush_user_abort();
         }
@@ -1023,11 +1060,6 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
   // modules that have not been upgraded yet.  The issue is that
   // we can't tell what a module's dependencies are until we downloaded it.
   // Okay, let's go ahead and download everything upfront...
-  if (!array_key_exists('project_cache', $fsm_context)) {
-    // TODO: Generate a better name for the Drush site-upgrade project download cache
-    $fsm_context['project_cache'] = '/tmp/drush-upgrade';
-    drush_mkdir($fsm_context['project_cache']);
-  }
   $projects_to_download = array();
   $contrib_to_upgrade = array();
   $project_map = array();
@@ -1252,9 +1284,17 @@ function _drush_site_upgrade_get_module_code(&$fsm_context, &$control) {
 }
 
 function _drush_site_upgrade_enable_module(&$fsm_context, &$control) {
+  return _drush_site_upgrade_enable_specified_modules($fsm_context, &$control, array($fsm_context['module_to_upgrade']));
+}
+
+function _drush_site_upgrade_enable_content_migrate(&$fsm_context, &$control) {
+  return _drush_site_upgrade_enable_specified_modules($fsm_context, &$control, array('content_migrate'));
+}
+
+function _drush_site_upgrade_enable_specified_modules(&$fsm_context, &$control, $specified_modules) {
   $control['drush-command'] = 'pm-enable';
   $control['drush-site'] = $fsm_context['target_key'];
-  $control['drush-arguments'] = array($fsm_context['module_to_upgrade']);
+  $control['drush-arguments'] = $specified_modules;
   $control['drush-options'] = array();
   $control['drush-backend-options'] = array('integrate' => TRUE);
 
@@ -1282,9 +1322,11 @@ function _drush_upgrade_site_download_next_version_drupal(&$fsm_context, $contro
     $destination_core = $fsm_context['destination_core'];
     $destination_conf_path = $fsm_context['destination_conf_path'];
 
-    // TODO: what if $destination_core exists?  Or what if code should come from somewhere else?
-    drush_upgrade_download_drupal($target_version, $destination_core);
-    if (drush_get_error()) return FALSE; // Early exit if we see an error.
+    // Skip the download if there are already files at the destination core directory
+    if (!is_dir($destination_core)) {
+      drush_upgrade_download_drupal($target_version, $destination_core);
+      if (drush_get_error()) return FALSE; // Early exit if we see an error.
+    }
   }
   return TRUE;
 }
@@ -1338,6 +1380,13 @@ function _drush_upgrade_site_verify_default_settings_removed(&$fsm_context, $con
 function _drush_upgrade_site_remove_default_settings(&$fsm_context, $control) {
   drush_op('unlink', $fsm_context['destination_core'] . '/' . $fsm_context['destination_conf_path'] . '/default.settings.php');
   return TRUE;
+}
+
+function _drush_site_upgrade_copy_files(&$fsm_context, $control) {
+  $source_site = '@self';
+  $target_site = $fsm_context['target_key'];
+  $result = drush_invoke_process('@none', 'core-rsync', array($source_site . ':%files', $target_site . ':%files'), array('yes' => TRUE));
+  return ($result['error_status'] == 0);
 }
 
 /**
