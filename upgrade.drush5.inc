@@ -955,6 +955,7 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       // In auto mode, we will always select the first option for the user.
       if ($auto) {
         $control['selection'] = key($control['selection-options']);
+        drush_print(dt("Drush will now do the step '!stage'.", array('!stage' => $control['selection-options'][$control['selection']])));
       }
       else {
         drush_print();
@@ -1394,7 +1395,7 @@ function _drush_upgrade_site_remove_default_settings(&$fsm_context, $control) {
 function _drush_site_upgrade_copy_files(&$fsm_context, $control) {
   $source_site = '@self';
   $target_site = $fsm_context['target_key'];
-  $result = drush_invoke_process('@none', 'core-rsync', array($source_site . ':%files', $target_site . ':%files'), array('yes' => TRUE));
+  $result = drush_invoke_process('@self', 'core-rsync', array($source_site . ':%files', $target_site . ':%files'), array('yes' => TRUE));
   return ($result['error_status'] == 0);
 }
 
