@@ -437,6 +437,7 @@ function _drush_upgrade_site_upgrade_stages() {
             procedures at http://drupal.org/node/948216
       ",
     'note' => 'Drush will walk through these instructions for each module.  Note that all of the new modules will be downloaded up-front now; they will be moved into place later.',
+    'prepare' => '_drush_site_upgrade_reset_module_to_upgrade',
     'verify' => '_drush_site_upgrade_select_contrib_module_to_upgrade',
     'callback' => '_drush_site_upgrade_prepare_module_upgrade',
     'next' => array(
@@ -511,6 +512,8 @@ function _drush_upgrade_site_upgrade_stages() {
       "
          6. Back up your database and files again, between each module update, so that if there is a problem, you can revert to the most recent update.
       ",
+    // TODO: This really should not be tagged 'optional', but to avoid gumming up the works with --auto...
+    'optional' => TRUE,
     'next' => 'UPGRADE.txt Major Upgrade Step 15',
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Finish Up'] = array(
@@ -875,6 +878,9 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
     if (!$control['omit-stage-header']) {
       drush_print("\n" . str_pad("", drush_get_context('DRUSH_COLUMNS', 80) - 2, ':'). "\n" . $stage);
     }
+    if (array_key_exists('module_to_upgrade', $fsm_context)) {
+      drush_print(dt("Upgrading module: !modulename", array('!modulename' => $fsm_context['module_to_upgrade'])));
+    }
     foreach (array('description', 'optional', 'not-always-needed', 'unnecessary', 'note') as $message_key) {
       if (!empty($control[$message_key])) {
         drush_print("\n" . _drush_upgrade_rewrap_msg($control[$message_key]));
@@ -1044,9 +1050,12 @@ function _drush_upgrade_site_already_latest_version_drupal(&$fsm_context, $contr
   return $installed == $latest;
 }
 
-function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$control) {
+function _drush_site_upgrade_reset_module_to_upgrade(&$fsm_context, &$control) {
   // Nothing selected yet; unset the module to upgrade from the previous iteration.
   unset($fsm_context['module_to_upgrade']);
+}
+
+function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$control) {
   // We will get a list of all of the enabled modules from the target site fresh every
   // time we get here, just in case something changed since last time.
   // TODO: maybe we could cache this info, and refresh it only if the user
