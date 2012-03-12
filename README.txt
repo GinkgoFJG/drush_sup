@@ -34,6 +34,21 @@ Overview of Upgrade Procedure:
    any code modifications you made during the previous upgrade.
 
 
+Upgrade Problems and Workarounds:
+=================================
+
+If you use features, you will want to run `drush fia` on your source site
+before beginning.  See: http://drupal.org/node/1014522#comment-5478110
+
+Error updating uuid module:  Apply the patch at http://drupal.org/node/1469942
+to fix.
+
+Token module error on enable:  if you are using the token module, you will find
+that an error is thrown during the enable step.  To get around this problem you
+may simply run updatedb on the target site manually, and then continue the upgrade.
+Optionally, apply the cache_clear_all patch at http://drupal.org/node/1477932
+to Drupal core before enabling the token module.
+
 
 Important To-Do Items:
 ======================
@@ -74,6 +89,10 @@ processing on it until later.  The same should be done when a
 module's updatedb fails. To recover from this, though, would require
 restoring the site from the last backup point.
 
+Updating core pauses for confirmation in updatedb
+-------------------------------------------------
+--yes should be specified, at least in 'auto' mode.
+Perhaps the prompt should only appear in --confirm-all mode.
 
 Wishlist Features:
 ==================
@@ -140,6 +159,15 @@ plus all of the log messages from updatedb (except for the lines that say only
 `drush @target upgrade-report` that will dump this info out, so that upgraders
 can review progress during and after the upgrade process.  We should save
 the progress file after every stage, not just on abort / error.
+
+Automatic detection of modified .htaccess / robots.txt
+-------------------------------------------------------------------------------------
+If `hacked` is available, or if core was checked out via git from
+drupal.org, we could generate a patch file with local modifications
+to .htaccess and robots.txt.  Once we had a patch file, we could at least
+try to apply it on the upgraded system.  If the modifications consisted only
+of appended info to the end of the file, this might be reliable enough. (?)
+Need to test; I usually do not modify these files.
 
 Automatic Remediation of Status Report Problems
 -----------------------------------------------
