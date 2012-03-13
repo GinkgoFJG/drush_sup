@@ -129,6 +129,11 @@ function upgrade_drush_command() {
  *    step.  If not specified, Drush will say: "Drush cannot perform this step;
  *    you must do it manually."
  *
+ *  - backup:
+ *
+ *    If set, a backup of the target site will be saved if the callback completes
+ *    successfully. The backup will be named per the value of this item.
+ *
  *  - next:
  *
  *    In its simplest form, 'next' is a string that describes the next 
@@ -419,6 +424,8 @@ function _drush_upgrade_site_upgrade_stages() {
     'drush-command' => 'updatedb',
     'drush-site' => '@upgrade-target',
     'drush-backend-options' => array('interactive' => TRUE),
+    'backup' => 'upgraded-core',
+    'backup_message' => "Upgraded Core",
     'next' => 'UPGRADE.txt Major Upgrade Step 14',
   );
   $stages['UPGRADE.txt Major Upgrade Step 14'] = array(
@@ -502,6 +509,8 @@ function _drush_upgrade_site_upgrade_stages() {
     'drush-site' => '@upgrade-target',
     'drush-options' => array('yes' => TRUE),
     'drush-backend-options' => array('interactive' => TRUE),
+    'backup' => 'upgraded-contrib',
+    'backup_message' => "Upgraded Contrib Module !module_to_upgrade",
     'next' => array(
       'ok' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 6',
       'error' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Update Errors',
@@ -617,8 +626,10 @@ function upgrade_site_upgrade_complete() {
 /**
  * Give a report on the progress of an upgrade
  */
-function drush_upgrade_site_upgrade_progress() {
-  $fsm_context = _drush_upgrade_load_fsm_context(drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT'));
+function drush_upgrade_site_upgrade_progress($fsm_context = NULL) {
+  if (!is_array($fsm_context)) {
+    $fsm_context = _drush_upgrade_load_fsm_context(drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT'));
+  }
   if (array_key_exists('stage', $fsm_context)) {
     drush_print("The current stage is " . $fsm_context['stage']);
     drush_print("The complete list of contrib extensions is: " . implode(',', $fsm_context['contrib_to_upgrade']));
@@ -633,8 +644,19 @@ function drush_upgrade_site_upgrade_progress() {
         drush_print("   $extension: $message");
       }
     }
+    drush_print_r($fsm_context['target_alias']);
     drush_print("The project cache is at " . $fsm_context['project_cache']);
-    drush_print_r(array_keys($fsm_context));
+    foreach ($fsm_context as $key => $value) {
+      if (!is_array($value)) {
+        if ($value === TRUE) {
+          $value = "true";
+        }
+        if ($value === FALSE) {
+          $value = "false";
+        }
+        drush_print("$key: $value");
+      }
+    }
   }
   else {
     return drush_set_error('DRUSH_NO_UPGRADE_IN_PROGRESS', dt("There is no site upgrade in progress on the target site."));
@@ -668,7 +690,7 @@ function drush_upgrade_site_upgrade_check_parameters($target_key = NULL) {
 
 function _drush_upgrade_load_fsm_context($destination_core) {
   $fsm_context = array();
-  $cache_file = $destination_core. '/Drush-Upgrade-In-Progress-Context.serialized';
+  $cache_file = $destination_core. '/upgrade-context.serialized';
   if (file_exists($cache_file)) {
     $fsm_context = (array)unserialize(file_get_contents($cache_file));
   }
@@ -723,19 +745,23 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
 
   $fsm_context['source_version'] = drush_drupal_major_version();
   $fsm_context['target_version'] = $fsm_context['source_version'] + 1;
-  $fsm_context['target_key'] = $target_key;
   $fsm_context['fsm_context_cache_file'] = FALSE;
   $fsm_context['uninstall_extensions'] = drush_get_option('uninstall', '');
   $fsm_context['core-only'] = drush_get_option('core-only', FALSE);
+  $source_record = drush_sitealias_get_record('@self');
+  $fsm_context['source_name'] = (!empty($source_record) ? $source_record['#name'] . '-' : '') . 'd' . $fsm_context['source_version'];
   if (isset($target_key)) {
-    if (!array_key_exists('project_cache', $fsm_context)) {
-      // TODO: Generate a better name for the Drush site-upgrade project download cache
-      $fsm_context['project_cache'] = '/tmp/drush-upgrade';
-      drush_mkdir($fsm_context['project_cache']);
-    }
+    $fsm_context['target_key'] = $target_key;
     $fsm_context['target_alias'] = drush_sitealias_get_record($target_key);
     if (!empty($fsm_context['target_alias'])) {
       $fsm_context['destination_core'] = $fsm_context['target_alias']['root'];
+      $fsm_context['target_name'] = (!empty($fsm_context['target_alias']) ? $fsm_context['target_alias']['#name'] . '-' : '') . 'd' . $fsm_context['target_version'];
+      $fsm_context['work_name'] = $fsm_context['source_name'] . '-to-' . $fsm_context['target_name'];
+      $fsm_context['work_dir'] = drush_directory_cache($fsm_context['work_name']);
+      $fsm_context['project_cache'] = $fsm_context['work_dir'] . '/project_cache';
+      $fsm_context['backup_dir'] = $fsm_context['work_dir'] . '/progress_backups';
+      drush_mkdir($fsm_context['project_cache']);
+      drush_mkdir($fsm_context['backup_dir']);
 
       $fsm_context['destination_conf_path'] = conf_path();
       if (drush_get_option('force-sites-default')) {
@@ -761,33 +787,57 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
           $options['reuse'] = dt("Re-use the existing code: re-import the database from the source site and update core and contrib modules again.");
         }
         $options['replace'] = dt("Delete the existing target: start over from the beginning.");
-       
+        $backup_files = drush_scan_directory($fsm_context['backup_dir'], '/.*\.serialized$/', array('.', '..', 'CVS'));
+        $backups = array();
+        foreach ($backup_files as $backup_file => $info) {
+          $backup_name = basename($backup_file, '.serialized');
+          $backup_archive = dirname($backup_file) . '/' . $backup_name . '.tar';
+          if (file_exists($backup_archive)) {
+            $backup_context = (array)unserialize(file_get_contents($backup_file));
+            $backups[$backup_name] = array(
+              'archive' => $backup_archive,
+              'context' => $backup_context
+            );
+            $options[$backup_name] = dt("Restore backup '!message' and resume upgrade", array('!message' => $backup_context['backup_message']));
+          }
+        }
+        
         $selection = drush_choice($options, dt("A Drupal site exists at the destination. What would you like to do?"));
-        switch ($selection) {
-          case 'replace':
-            drush_delete_dir($fsm_context['destination_core']);
-            break;
-          case 'resume':
-            $fsm_context = $previous_fsm_context;
-            $stage = $fsm_context['stage'];
-            break;
-          case 'reuse':
-            // Move every project from the destination site's sites/all/modules and sites/all/themes directory
-            // into the project cache.  TODO:  Maybe we should put the saved files somewhere else.
-            foreach (array('sites/all/modules', 'sites/all/themes') as $dir) {
-              $scan_dir = $fsm_context['destination_core'] . '/' . $dir;
-              $projects = drush_scan_directory($scan_dir, '/./', array('.', '..', 'CVS'), 0, 0);
-              foreach ($projects as $project_path => $info) {
-                $target_dir = $fsm_context['project_cache'] . '/' . basename($project_path);
-                if (is_dir($target_dir)) {
-                  drush_delete_dir($target_dir, TRUE);
+        // Selected a backup item?
+        if (array_key_exists($selection, $backups)) {
+          $archive = $backups[$selection]['archive'];
+          $fsm_context = $backups[$selection]['context'];
+          $stage = $fsm_context['stage'];
+          drush_upgrade_site_upgrade_progress($fsm_context);
+          $values = drush_invoke_process('@none', 'archive-restore', array($archive), array('destination' => $fsm_context['destination_core'], 'overwrite' => TRUE));
+        }
+        else {
+          switch ($selection) {
+            case 'replace':
+              drush_delete_dir($fsm_context['destination_core']);
+              break;
+            case 'resume':
+              $fsm_context = $previous_fsm_context;
+              $stage = $fsm_context['stage'];
+              break;
+            case 'reuse':
+              // Move every project from the destination site's sites/all/modules and sites/all/themes directory
+              // into the project cache.  TODO:  Maybe we should put the saved files somewhere else.
+              foreach (array('sites/all/modules', 'sites/all/themes') as $dir) {
+                $scan_dir = $fsm_context['destination_core'] . '/' . $dir;
+                $projects = drush_scan_directory($scan_dir, '/./', array('.', '..', 'CVS'), 0, 0);
+                foreach ($projects as $project_path => $info) {
+                  $target_dir = $fsm_context['project_cache'] . '/' . basename($project_path);
+                  if (is_dir($target_dir)) {
+                    drush_delete_dir($target_dir, TRUE);
+                  }
+                  rename($project_path, $target_dir);
                 }
-                rename($project_path, $target_dir);
               }
-            }
-            break;
-          default:
-            return drush_user_abort();
+              break;
+            default:
+              return drush_user_abort();
+          }
         }
       }
     }
@@ -795,7 +845,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   // These flags always take on the value reflected by the cli options, regardless
   // of what might have been cached in the previous fsm context file.
   $fsm_context['auto'] = drush_get_option('auto', FALSE);
-  $fsm_context['straightforward'] = !drush_get_option('confirm-all', !$fsm_context['auto']);
+  $fsm_context['straightforward'] = (!drush_get_option('confirm-all')) | $fsm_context['auto'];
   $fsm_context['skip-optional'] = drush_get_option('skip-optional', $fsm_context['straightforward']);
 
   // Erase the 'download_attempts' variable on each run
@@ -817,12 +867,6 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   }
   // Start up the FSM and run the upgrade
   _drush_upgrade_site_state_machine($fsm_context, $stages, $stage);
-
-  // If we're not finished with the upgrade, cache the $fsm_context
-  // so that we can restart the upgrade operation again later.
-  if ($fsm_context['fsm_context_cache_file']) {
-    file_put_contents($fsm_context['fsm_context_cache_file'], serialize($fsm_context));
-  }
 }
 
 function _drush_upgrade_rewrap_msg($msg) {
@@ -835,6 +879,21 @@ function _drush_upgrade_rewrap_msg($msg) {
     $msg = preg_replace("/^/m", str_pad('', strlen($matches[1])), $msg);
   }
   return trim($msg);
+}
+
+/**
+ * Makes a replacements array for use with dt();
+ * includes a !key'ed replacement for every item
+ * in the fsm context that has a string value.
+ */
+function _drush_site_upgrade_replacements($fsm_context) {
+  $replacements = array();
+  foreach ($fsm_context as $key => $value) {
+    if (is_string($value)) {
+      $replacements['!' . $key] = $value;
+    }
+  }
+  return $replacements;
 }
 
 function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stage) {
@@ -859,6 +918,7 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       'straightforward' => FALSE,
       'continue' => FALSE,
       'callback' => NULL,
+      'backup' => FALSE,
       'drush-command' => FALSE,
       'verify' => NULL,
       'prepare' => NULL,
@@ -879,7 +939,7 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       drush_print("\n" . str_pad("", drush_get_context('DRUSH_COLUMNS', 80) - 2, ':'). "\n" . $stage);
     }
     if (array_key_exists('module_to_upgrade', $fsm_context)) {
-      drush_print(dt("Upgrading module: !modulename", array('!modulename' => $fsm_context['module_to_upgrade'])));
+      drush_print(dt("Upgrading module: !module_to_upgrade", _drush_site_upgrade_replacements($fsm_context)));
     }
     foreach (array('description', 'optional', 'not-always-needed', 'unnecessary', 'note') as $message_key) {
       if (!empty($control[$message_key])) {
@@ -998,6 +1058,32 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
     if (array_key_exists('post-verify-failure', $control)) {
       drush_print();
       return drush_set_error('DRUSH_UPGRADE_REQUIREMENT_FAILURE', dt("Verify function did not pass for a required step; aborting."));
+    }
+    // Check to see if we should back up the target site after this stage.
+    $backup_file = FALSE;
+    if (($stage_result == 'ok') && $control['backup']) {
+      $backup_message = dt($control['backup_message'], _drush_site_upgrade_replacements($fsm_context));
+      $backup_file = $fsm_context['backup_dir'] . '/' . $control['backup'] . '.tar';
+      drush_print(dt("Making backup: '!msg' in !file", array('!msg' => $backup_message, '!file' => $backup_file)));
+      $fsm_context['backups'][$control['backup']] = array(
+        'message' => $backup_message,
+        'file' => $backup_file,
+      );
+      $fsm_context['backup_message'] = $backup_message;
+      $saved_context_file = $fsm_context['backup_dir'] . '/' . $control['backup'] . '.serialized';
+      file_put_contents($saved_context_file, serialize($fsm_context));
+    }
+    // Cache the $fsm_context so that we can restart the upgrade operation again later.
+    // We want to make sure this is written before the backup is made, but after the
+    // information about the backup is cached in the context.  We should also cache the
+    // state even in stages where a backup is not made.  We do, however, avoid saving
+    // the fsm state until the destination directory exists.
+    if ($fsm_context['fsm_context_cache_file'] && is_dir(dirname($fsm_context['fsm_context_cache_file']))) {
+      file_put_contents($fsm_context['fsm_context_cache_file'], serialize($fsm_context));
+    }
+    // If a backup was requested, make it now.
+    if ($backup_file) {
+      $values = drush_invoke_process($fsm_context['target_key'], 'archive-dump', array(), array('destination' => $backup_file, 'overwrite' => TRUE));
     }
     // Go on to the next stage of the FSM.
     if (array_key_exists($stage_result, $control['next'])) {
@@ -1333,7 +1419,7 @@ function _drush_upgrade_site_download_next_version_drupal(&$fsm_context, $contro
     $destination_conf_path = $fsm_context['destination_conf_path'];
 
     // Skip the download if there are already files at the destination core directory
-    if (!is_dir($destination_core)) {
+    if (!is_dir($destination_core . '/includes/bootstrap.inc')) {
       drush_upgrade_download_drupal($target_version, $destination_core);
       if (drush_get_error()) return FALSE; // Early exit if we see an error.
     }
@@ -1346,7 +1432,7 @@ function _drush_upgrade_site_make_settings_writable(&$fsm_context, $control) {
     $destination_core = $fsm_context['destination_core'];
     $destination_conf_path = $fsm_context['destination_conf_path'];
     $fsm_context['settings_destination'] = $destination_core . '/' . $destination_conf_path . '/settings.php';
-    drush_upgrade_copy_settings($fsm_context['target_alias'], $fsm_context['settings_destination']);
+    return drush_upgrade_copy_settings($fsm_context['target_alias'], $fsm_context['settings_destination']);
   }
   return TRUE;
 }
@@ -2277,7 +2363,7 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
   drush_sitealias_cache_db_settings($target_alias, $databases);
 
   // Also append the new configuration options to the end of settings.php.
-  drush_op('file_put_contents', $settings_destination, $append, FILE_APPEND);
+  return drush_op('file_put_contents', $settings_destination, $append, FILE_APPEND) !== FALSE;
 }
 
 /**
