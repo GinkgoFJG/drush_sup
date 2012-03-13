@@ -424,8 +424,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'drush-command' => 'updatedb',
     'drush-site' => '@upgrade-target',
     'drush-backend-options' => array('interactive' => TRUE),
-    'backup' => 'upgraded-core',
-    'backup_message' => "Upgraded Core",
     'next' => 'UPGRADE.txt Major Upgrade Step 14',
   );
   $stages['UPGRADE.txt Major Upgrade Step 14'] = array(
@@ -433,6 +431,8 @@ function _drush_upgrade_site_upgrade_stages() {
       "
         14. Backup your database after the core upgrade has run.
       ",
+    'backup' => 'upgraded-core',
+    'backup_message' => "Upgraded Core",
     'straightforward' => TRUE,
     'callback' => '_drush_upgrade_site_backup_after_updatedb',
     'next' => 'UPGRADE.txt Major Upgrade Step 15',
@@ -509,8 +509,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'drush-site' => '@upgrade-target',
     'drush-options' => array('yes' => TRUE),
     'drush-backend-options' => array('interactive' => TRUE),
-    'backup' => 'upgraded-contrib',
-    'backup_message' => "Upgraded Contrib Module !module_to_upgrade",
     'next' => array(
       'ok' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 6',
       'error' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Update Errors',
@@ -521,8 +519,9 @@ function _drush_upgrade_site_upgrade_stages() {
       "
          6. Back up your database and files again, between each module update, so that if there is a problem, you can revert to the most recent update.
       ",
-    // TODO: This really should not be tagged 'optional', but to avoid gumming up the works with --auto...
-    'optional' => TRUE,
+    'straightforward' => TRUE,
+    'backup' => 'upgraded-contrib',
+    'backup_message' => "Upgraded Contrib Module !module_to_upgrade",
     'next' => 'UPGRADE.txt Major Upgrade Step 15',
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Finish Up'] = array(
@@ -530,7 +529,7 @@ function _drush_upgrade_site_upgrade_stages() {
       "
          If you have a Drupal 7 version of the theme you were using for Drupal 6, place it in sites/all/themes/ and reenable it.
       ",
-    'next' => 'UPGRADE.txt Major Upgrade Step 16',
+    'next' => 'Post-upgrade Step A',
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Enable Errors'] = array(
     'description' =>
@@ -542,6 +541,7 @@ function _drush_upgrade_site_upgrade_stages() {
         is moved to another project.  If this happens, you can manually download the new project and
         Drush will automatically recover.
       ",
+    'not-always-needed' => TRUE,
     'next' => 'UPGRADE.txt Major Upgrade Step 15',
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Update Errors'] = array(
@@ -555,17 +555,6 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     'next' => 'UPGRADE.txt Major Upgrade Step 15',
   );
-  $stages['UPGRADE.txt Major Upgrade Step 16'] = array(
-    'description' =>
-      "
-        16. Go to Administration > Reports > Status report. Verify that everything is
-            working as expected.
-      ",
-    'note' => 'Drush can also show you this information in the console via the `drush status-report` command.',
-    'drush-command' => 'status-report',
-    'drush-site' => '@upgrade-target',
-    'next' => 'Post-upgrade Step A',
-  );
   $stages['Post-upgrade Step A'] = array(
     'description' =>
       "
@@ -577,9 +566,36 @@ function _drush_upgrade_site_upgrade_stages() {
   $stages['Post-upgrade Step B'] = array(
     'description' =>
       "
-        A. Enable the core module content_migrate.
+        B. Enable the core module content_migrate.
       ",
     'callback' => '_drush_site_upgrade_enable_content_migrate',
+    'next' => 'Post-upgrade Step C',
+  );
+  $stages['Post-upgrade Step C'] = array(
+    'description' =>
+      "
+        C. Fix up some file system permissions.
+      ",
+    'callback' => '_drush_site_upgrade_fix_permissions',
+    'next' => 'Post-upgrade Step D',
+  );
+  $stages['Post-upgrade Step D'] = array(
+    'description' =>
+      "
+        D. Run cron, for good measure.
+      ",
+    'callback' => '_drush_site_upgrade_run_cron',
+    'next' => 'UPGRADE.txt Major Upgrade Step 16',
+  );
+  $stages['UPGRADE.txt Major Upgrade Step 16'] = array(
+    'description' =>
+      "
+        16. Go to Administration > Reports > Status report. Verify that everything is
+            working as expected.
+      ",
+    'note' => 'Drush can also show you this information in the console via the `drush status-report` command.',
+    'drush-command' => 'status-report',
+    'drush-site' => '@upgrade-target',
     'next' => 'UPGRADE.txt Major Upgrade Step 17',
   );
   $stages['UPGRADE.txt Major Upgrade Step 17'] = array(
@@ -809,12 +825,13 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
           $fsm_context = $backups[$selection]['context'];
           $stage = $fsm_context['stage'];
           drush_upgrade_site_upgrade_progress($fsm_context);
+          drush_delete_dir($fsm_context['destination_core'], TRUE);
           $values = drush_invoke_process('@none', 'archive-restore', array($archive), array('destination' => $fsm_context['destination_core'], 'overwrite' => TRUE));
         }
         else {
           switch ($selection) {
             case 'replace':
-              drush_delete_dir($fsm_context['destination_core']);
+              drush_delete_dir($fsm_context['destination_core'], TRUE);
               break;
             case 'resume':
               $fsm_context = $previous_fsm_context;
@@ -970,7 +987,7 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       $control['callback'] = '_drush_upgrade_site_drush_command';
     }
     $has_selection_options = !empty($control['selection-options']);
-    if ($control['callback'] && $control['straightforward'] && $fsm_context['straightforward']) {
+    if (($control['callback'] || $control['backup']) && $control['straightforward'] && $fsm_context['straightforward']) {
       $prompt_user = FALSE;
       drush_print();
       drush_print(dt("Drush will automatically do this step now."));
@@ -1013,16 +1030,18 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       }
 
       // In auto mode, we will always select the first option for the user.
-      if ($auto) {
-        $control['selection'] = key($control['selection-options']);
-        drush_print(dt("Drush will now do the step '!stage'.", array('!stage' => $control['selection-options'][$control['selection']])));
-      }
-      else {
-        drush_print();
-        $control['selection'] = drush_choice($control['selection-options'], $control['prompt']);
-        if (!$control['selection']) {
-          // If a stage is aborted, it is not recorded in the history.
-          return drush_user_abort();
+      if (!empty($control['selection-options'])) {
+        if ($auto) {
+          $control['selection'] = key($control['selection-options']);
+          drush_print(dt("Drush will now do the step '!stage'.", array('!stage' => $control['selection-options'][$control['selection']])));
+        }
+        else {
+          drush_print();
+          $control['selection'] = drush_choice($control['selection-options'], $control['prompt']);
+          if (!$control['selection']) {
+            // If a stage is aborted, it is not recorded in the history.
+            return drush_user_abort();
+          }
         }
       }
     }
@@ -1380,33 +1399,49 @@ function _drush_site_upgrade_get_module_code(&$fsm_context, &$control) {
 }
 
 function _drush_site_upgrade_enable_module(&$fsm_context, &$control) {
-  return _drush_site_upgrade_enable_specified_modules($fsm_context, &$control, array($fsm_context['module_to_upgrade']));
+  return _drush_site_upgrade_enable_specified_module($fsm_context, &$control, $fsm_context['module_to_upgrade']);
 }
 
 function _drush_site_upgrade_enable_content_migrate(&$fsm_context, &$control) {
-  return _drush_site_upgrade_enable_specified_modules($fsm_context, &$control, array('content_migrate'));
+  return _drush_site_upgrade_enable_specified_module($fsm_context, &$control, 'content_migrate');
 }
 
-function _drush_site_upgrade_enable_specified_modules(&$fsm_context, &$control, $specified_modules) {
-  $control['drush-command'] = 'pm-enable';
-  $control['drush-site'] = $fsm_context['target_key'];
-  $control['drush-arguments'] = $specified_modules;
-  $control['drush-options'] = array();
-  $control['drush-backend-options'] = array('integrate' => TRUE);
-
-  $result = drush_invoke_process($control['drush-site'], $control['drush-command'], $control['drush-arguments'], $control['drush-options'], $control['drush-backend-options']);
-  $module_was_enabled = is_array($result['object']) && array_key_exists($specified_modules, $result['object']);
+function _drush_site_upgrade_enable_specified_module(&$fsm_context, &$control, $specified_module) {
+  $result = drush_invoke_process($fsm_context['target_key'], 'pm-enable', array($specified_module), array(), array('integrate' => TRUE));
+  $resultcode = TRUE;
+  $module_was_enabled = is_array($result['object']) && array_key_exists($specified_module, $result['object']);
   // If we could successfully enable the module, clear it from the 'extensions with problems'
   // list, if it was included there.  If the module could not be enabled, then take it out of the list.
+  // TODO: If the module was already enabled, that isn't really a problem. Double-check for that before signalling a failure
   if ($module_was_enabled) {
-    unset($fsm_context['extensions_with_problems'][$specified_modules]);
+    unset($fsm_context['extensions_with_problems'][$specified_module]);
   }
   else {
-    // TODO: Should we manage multiple failures in any way here?
-    $fsm_context['extensions_with_problems'][$specified_modules] = array('message' => dt("Error: failed to enable."));
+    $fsm_context['extensions_with_problems'][$specified_module] = array('message' => dt("Error: failed to enable."));
     return FALSE;
   }
   return TRUE;  
+}
+
+function _drush_site_upgrade_fix_permissions(&$fsm_context, $control) {
+  // The only thing we will do for now is make an attempt at making the 'files' directory writable
+  // to clear up one more potential problem with the status report.
+  $result = drush_invoke_process($fsm_context['target_key'], "drupal-directory", array("%files"));
+  $files_dir = $result['object'];
+  chmod(dirname($files_dir), 0777);
+  chmod($files_dir, 0777);
+  // TODO: The status report still says:
+  // "The directory temp does not exist. You may need to 
+  // set the correct directory at the file system       
+  // settings page or change the current directory's    
+  // permissions so that it is writable."
+  // Need to create the temp directory. 
+  return TRUE;
+}
+
+function _drush_site_upgrade_run_cron(&$fsm_context, $control) {
+  $result = (drush_invoke_process($fsm_context['target_key'], 'core-cron', array(), array(), array('interactive' => TRUE)) == 0);
+  return $result;
 }
 
 function _drush_upgrade_site_download_next_version_drupal(&$fsm_context, $control) {
