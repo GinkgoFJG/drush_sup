@@ -1454,7 +1454,10 @@ function _drush_upgrade_site_download_next_version_drupal(&$fsm_context, $contro
     $destination_conf_path = $fsm_context['destination_conf_path'];
 
     // Skip the download if there are already files at the destination core directory
-    if (!is_dir($destination_core . '/includes/bootstrap.inc')) {
+    if (file_exists($destination_core . '/includes/bootstrap.inc')) {
+      drush_print("Re-using existing Drupal core.");
+    }
+    else {
       drush_upgrade_download_drupal($target_version, $destination_core);
       if (drush_get_error()) return FALSE; // Early exit if we see an error.
     }
@@ -1466,7 +1469,11 @@ function _drush_upgrade_site_make_settings_writable(&$fsm_context, $control) {
   if (array_key_exists('destination_core', $fsm_context) && array_key_exists('target_alias', $fsm_context)) {
     $destination_core = $fsm_context['destination_core'];
     $destination_conf_path = $fsm_context['destination_conf_path'];
+    @chmod($destination_core . '/' . $destination_conf_path, 0777);
     $fsm_context['settings_destination'] = $destination_core . '/' . $destination_conf_path . '/settings.php';
+    if (file_exists($fsm_context['settings_destination'])) {
+      @chmod($fsm_context['settings_destination'], 0777);
+    }
     return drush_upgrade_copy_settings($fsm_context['target_alias'], $fsm_context['settings_destination']);
   }
   return TRUE;
@@ -1934,6 +1941,38 @@ function drush_upgrade_project_map($target_version) {
   drush_command_invoke_all_ref('drush_upgrade_project_map_alter', $result);
 
   return $result;
+}
+
+/**
+ * Prepare to upgrade; the first step is to disable all contrib modules.
+ */
+function drush_upgrade_site_upgrade_prepare() {
+  $contrib_extensions = func_get_args();
+  $uninstall_extensions = explode(',', drush_get_option('uninstall', ''));
+
+  // Set theme back to garland per Upgrade.txt.
+  variable_set('theme_default', 'garland');
+
+  // http://drupal.org/node/724102 recommends using "seven" as your admin theme.  Don't switch it to garland if it is already seven.
+  $admin_theme = variable_get('admin_theme', NULL);
+  if ($admin_theme != "seven") {
+    variable_set('admin_theme', 'garland');
+  }
+  else {
+    drush_log(dt("Admin theme is already set to 'seven'."), 'ok');
+  }
+
+  // Disable all contrib modules per Upgrade.txt.
+  drush_log(dt("Disabling !list", array('!list' => implode(", ", $contrib_extensions))), 'ok');
+  drush_invoke('pm-disable', $contrib_extensions);
+  if (drush_get_error()) return FALSE; // Early exit if we see an error.
+
+  // Uninstall any modules specified via the --uninstall flag.
+  if (!empty($uninstall_extensions)) {
+    drush_log(dt("Uninstalling !list", array('!list' => implode(", ", $uninstall_extensions))), 'ok');
+    drush_invoke('pm-uninstall', $uninstall_extensions);
+    if (drush_get_error()) return FALSE; // Early exit if we see an error.
+  }
 }
 
 /**
