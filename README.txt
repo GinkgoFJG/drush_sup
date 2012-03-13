@@ -61,6 +61,10 @@ a makefile that will pull down specific versions of certain modules
 using any selection feature available in Drush make. Anything other than
 "from a folder" is probably a "wishlist" feature.
 
+There is an easy workaround for this as it is.  All of the modules
+are pre-downloaded to the project cache folder, so the user can
+just drop patches and custom versions there.
+
 Error checking on updatedb
 --------------------------
 If pm-enable fails, the module is added to a "problems" list and
@@ -140,7 +144,7 @@ can review progress during and after the upgrade process.  We should save
 the progress file after every stage, not just on abort / error.
 
 Automatic detection of modified .htaccess / robots.txt
--------------------------------------------------------------------------------------
+------------------------------------------------------
 If `hacked` is available, or if core was checked out via git from
 drupal.org, we could generate a patch file with local modifications
 to .htaccess and robots.txt.  Once we had a patch file, we could at least
@@ -163,12 +167,16 @@ menus per the workaround in the aforementioned issue (and clear the cache)
 after the upgrade completes.
 
 
-Things I did Manually After My Site Upgrade
-===========================================
+Things I did Manually Durring and After My Site Upgrade
+=======================================================
 
-drush rsync @wk.dev:%files @wk.d7dev:%files
-drush @wk.d7dev en bartik seven
-drush @wk.d7dev vset theme_default 'bartik' # no point in doing this
+drush @wk.dev sup @wk.d7dev # run through 'Update core'
+cd /home/ga/.drush/cache/@self-d6-to-wk.d7dev-d7/project_cache/
+patch -Np1 < ~/tmp/patches/uuid-update-install-uuid-fields-13.patch
+cdd @wk.d7dev
+patch -Np1 < ~/tmp/patches/drupal-7-cache-clear-all.patch
+drush @wk.dev sup @wk.d7dev --auto
+drush @wk.d7dev en seven
 drush @wk.d7dev vset admin_theme 'seven'
 cp -R /srv/www/dev.westkingdom.org/sites/all/themes/wk_zen2/css/wk_img/ /srv/www/d7.westkingdom.org/sites/default/files/
 drush @wk.d7dev en toolbar
@@ -176,5 +184,4 @@ drush @wk.d7dev en shortcut
 drush @wk.d7dev en contextual
 drush @wk.d7dev sqlq "DELETE FROM drupal_menu_links WHERE module = 'system';"
 drush @wk.d7dev cc all
-drush @wk.d7dev en content_migrate
 
