@@ -1395,15 +1395,15 @@ function _drush_site_upgrade_enable_specified_modules(&$fsm_context, &$control, 
   $control['drush-backend-options'] = array('integrate' => TRUE);
 
   $result = drush_invoke_process($control['drush-site'], $control['drush-command'], $control['drush-arguments'], $control['drush-options'], $control['drush-backend-options']);
-  $module_was_enabled = is_array($result['object']) && array_key_exists($fsm_context['module_to_upgrade'], $result['object']);
+  $module_was_enabled = is_array($result['object']) && array_key_exists($specified_modules, $result['object']);
   // If we could successfully enable the module, clear it from the 'extensions with problems'
   // list, if it was included there.  If the module could not be enabled, then take it out of the list.
   if ($module_was_enabled) {
-    unset($fsm_context['extensions_with_problems'][$fsm_context['module_to_upgrade']]);
+    unset($fsm_context['extensions_with_problems'][$specified_modules]);
   }
   else {
     // TODO: Should we manage multiple failures in any way here?
-    $fsm_context['extensions_with_problems'][$fsm_context['module_to_upgrade']] = array('message' => dt("Error: failed to enable."));
+    $fsm_context['extensions_with_problems'][$specified_modules] = array('message' => dt("Error: failed to enable."));
     return FALSE;
   }
   return TRUE;  
