@@ -40,17 +40,18 @@ If you use features, you will want to run `drush fia` on your source site
 before beginning.  See: http://drupal.org/node/1014522#comment-5478110
 
 Error updating uuid module:  Apply the patch at http://drupal.org/node/1469942
-to fix.
+to fix.  If you see error messages after updating uuid, you must restore to
+the latest working backup and then apply the aforementioned patch to the uuid module
 
 Token module error on enable:  if you are using the token module, you will find
-that an error is thrown during the enable step.  To get around this problem you
-may simply run updatedb on the target site manually, and then continue the upgrade.
-Optionally, apply the cache_clear_all patch at http://drupal.org/node/1477932
-to Drupal core before enabling the token module.
+that an error is thrown during the enable step.  If you see error messages after
+updating the token module, you may simply run updatedb on the target site manually,
+and then continue with the upgrade.  Optionally, apply the cache_clear_all patch at 
+http://drupal.org/node/1477932 to Drupal core before enabling the token module.
 
 
-Important To-Do Items:
-======================
+Wishlist Features:
+==================
 
 Tell Drush Where to get Module Files (#5 above)
 ------------------------------------
@@ -76,10 +77,6 @@ Updating core pauses for confirmation in updatedb
 -------------------------------------------------
 --yes should be specified, at least in 'auto' mode.
 Perhaps the prompt should only appear in --confirm-all mode.
-
-Wishlist Features:
-==================
-
 
 Refine Handling of Pre-upgrade Warning Messages
 -----------------------------------------------
@@ -127,7 +124,10 @@ Support multiple versions of Drupal
 -----------------------------------
 Currently, only Drupal 6 to Drupal 7 upgrades are supported.  It
 would be possible to make a new FSM table to support Drupal 7 to
-Drupal 8 upgrades.
+Drupal 8 upgrades. (Note: it looks like the UPGRADE.txt for Drupal 8
+is substantially similar to the Drupal 7 upgrade process, so the Drupal 8
+upgrade support should be limited to providing an appropriate
+upgrade project map.)
 
 Set "Seven" as the Admin Theme
 ------------------------------
@@ -158,6 +158,9 @@ We could provide a separate command with a separate FSM state table to step
 through the entries from the `core-requirements` (`status-report`) report.
 Well-known problems (File System not writable, Rebuild Permissions, etc.)
 could be detected and the user could be prompted to choose the action to take.
+
+Note that sup already attempts to clean up prior to running the status
+report, to minimize the number of problems that might be reported.
 
 Repair Toolbar Menu
 -------------------
