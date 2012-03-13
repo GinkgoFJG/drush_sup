@@ -27,7 +27,6 @@ Overview of Upgrade Procedure:
    code and database using the archive-dump command. Two backups are maintained
    during the lifetime of the upgrade command--one after Drupal core is
    updated, and one after the most recent successful module update.
-   [NOT IMPLEMENTED YET]
 
 5. If the source site is changed, you may restart the site-upgrade from the
    beginning, and copy and update the modified database.  You may opt to keep
@@ -52,26 +51,6 @@ to Drupal core before enabling the token module.
 
 Important To-Do Items:
 ======================
-
-Copy `files` Directory
-----------------------
-UPGRADE.txt instructs the user to put D7 on top of the old D6 site,
-carefully removing stuff as it is upgraded and not needed any longer.
-Drush instead starts with an empty directory and downloads or moves
-in new modules as needed.  It is therefore necessary for Drush to
-copy the `files` directory to the new site at some point. Are there
-other assets that must be copied?
-
-Automatic Backup (#4 above)
-----------------
-The database and files should be automatically archived after every
-updatedb.
-
-Automatic Resume (#4 above)
-----------------
-When re-running site-upgrade after an abort or failure, Drush should
-provide a list of all backups made, + the stage they were made at, and
-give the user the option to resume from any backup point.
 
 Tell Drush Where to get Module Files (#5 above)
 ------------------------------------
