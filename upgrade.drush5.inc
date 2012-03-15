@@ -38,6 +38,7 @@ function upgrade_drush_command() {
       'replace' => 'Replace target if it already exists.  Default is to prompt.',
       'reuse' => 'Reuse target if it already exists.  Default is to prompt.',
       'uninstall' => 'Comma-separated list of modules to uninstall in the target database prior to upgrade.  n.b. The source site is not affected.',
+      'preferred' => 'Comma-separated list of alternative projects to prefer, when alternatives are available.',
     ),
     'aliases' => array('sup'),
     'topics' => array('docs-aliases'),
@@ -683,12 +684,12 @@ function drush_upgrade_site_upgrade_progress($fsm_context = NULL) {
  * Do some sanity checks to make sure that we are ready to perform an upgrade, and
  * that the command is being called with reasonable-looking parameters.
  */
-function drush_upgrade_site_upgrade_check_parameters($target_key = NULL) {
-  if (empty($target_key)) {
+function drush_upgrade_site_upgrade_check_parameters($fsm_context) {
+  if (!array_key_exists('target_key', $fsm_context)) {
     drush_print();
     return drush_set_error('DRUSH_UPGRADE_NO_TARGET', dt('No target argument specified.  To perform the site upgrade, define an alias record for the target site.'));
   }
-
+  $target_key = $fsm_context['target_key'];
   if (!$target_alias = drush_sitealias_get_record($target_key)) {
     return drush_set_error('DRUSH_UPGRADE_NO_TARGET', dt('Site alias not found: @target-key. See example.drushrc.php.', array('@target-key' => $target_key)));
   }
@@ -774,7 +775,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
       $fsm_context['target_name'] = (!empty($fsm_context['target_alias']) ? $fsm_context['target_alias']['#name'] . '-' : '') . 'd' . $fsm_context['target_version'];
       $fsm_context['work_name'] = $fsm_context['source_name'] . '-to-' . $fsm_context['target_name'];
       $fsm_context['work_dir'] = drush_directory_cache($fsm_context['work_name']);
-      $fsm_context['project_cache'] = $fsm_context['work_dir'] . '/project_cache';
+      $fsm_context['project_cache'] = $fsm_context['work_dir'] . '/project_cache/disabled';
       $fsm_context['backup_dir'] = $fsm_context['work_dir'] . '/progress_backups';
       drush_mkdir($fsm_context['project_cache']);
       drush_mkdir($fsm_context['backup_dir']);
@@ -1078,6 +1079,13 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       drush_print();
       return drush_set_error('DRUSH_UPGRADE_REQUIREMENT_FAILURE', dt("Verify function did not pass for a required step; aborting."));
     }
+    // Go on to the next stage of the FSM.
+    if (array_key_exists($stage_result, $control['next'])) {
+      $stage = $control['next'][$stage_result];
+    }
+    else {
+      return drush_set_error('DRUSH_UPGRADE_STATE_MACHINE_ERROR', dt("Cannot continue; no next stage."));
+    }
     // Check to see if we should back up the target site after this stage.
     $backup_file = FALSE;
     if (($stage_result == 'ok') && $control['backup']) {
@@ -1103,13 +1111,6 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
     // If a backup was requested, make it now.
     if ($backup_file) {
       $values = drush_invoke_process($fsm_context['target_key'], 'archive-dump', array(), array('destination' => $backup_file, 'overwrite' => TRUE));
-    }
-    // Go on to the next stage of the FSM.
-    if (array_key_exists($stage_result, $control['next'])) {
-      $stage = $control['next'][$stage_result];
-    }
-    else {
-      return drush_set_error('DRUSH_UPGRADE_STATE_MACHINE_ERROR', dt("Cannot continue; no next stage."));
     }
   }
 }
@@ -1206,7 +1207,7 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
       elseif (array_key_exists($extension, $fsm_context['special_projects']['project-remap'])) {
         $project = $fsm_context['special_projects']['project-remap'][$project];
       }
-    
+
       $contrib_to_upgrade[] = $extension;
       $project_map[$extension] = $project;
     }
@@ -1608,7 +1609,6 @@ function _drush_upgrade_site_backup_after_updatedb(&$fsm_context, $control) {
 function drush_upgrade_gather_information(&$fsm_context) {
   $source_version = $fsm_context['source_version'];
   $target_version = $fsm_context['target_version'];
-  $target_key = $fsm_context['target_key'];
 
   drush_print();
   drush_print(dt("Gathering information about core and contrib modules..."));
@@ -1643,19 +1643,20 @@ function drush_upgrade_gather_information(&$fsm_context) {
   elseif (!is_array($fsm_context['uninstall_extensions'])) {
     $fsm_context['uninstall_extensions'] = explode(',', $fsm_context['uninstall_extensions']);
   }
+}
 
-  // WARN:  Tell the user about any special situations that might exist with contrib modules.
-
+function drush_upgrade_generate_information_messages(&$fsm_context) {
   $fsm_context['project_download_list'] = array();
   $fsm_context['project_info_map'] = array();
   $fsm_context['contrib_to_upgrade'] = array();
+  $fsm_context['special_warning'] = array();
   if (!empty($fsm_context['contrib_extensions']) && !$fsm_context['core-only']) {
+    drupal_site_upgrade_build_special_project_list($fsm_context);
+
     // Make a list of all of the extensions to download.  We will
     // download everything in the contrib extension list, but we
     // will skip projects that already exist.
-    $fsm_context['special_projects'] = drush_upgrade_project_map($target_version);
     $in_core = array();
-    $fsm_context['special_warning'] = array();
     foreach ($fsm_context['contrib_extensions'] as $extension_name) {
       // Only check extensions that are NOT in our uninstall list.
       if (!in_array($extension_name, $fsm_context['uninstall_extensions']) && array_key_exists($extension_name, $fsm_context['extension_info'])) {
@@ -1666,10 +1667,6 @@ function drush_upgrade_gather_information(&$fsm_context) {
           $project = $fsm_context['extension_info'][$extension_name]->info['project'];
           $fsm_context['project_info_map'][$project]['name'] = $fsm_context['extension_info'][$extension_name]->info['name'];
           $fsm_context['project_info_map'][$project]['version'] = $fsm_context['extension_info'][$extension_name]->info['version'];
-          // Check our lookup table to see if a project has been renamed.
-          if (array_key_exists($project, $fsm_context['special_projects']['project-remap'])) {
-            $project = $fsm_context['special_projects']['project-remap'][$project];
-          }
           // If the module has been rolled into core in the next major release of
           // Drupal, then we do not need to download it.  Add it to an array for
           // reporting purposes.
@@ -1678,8 +1675,6 @@ function drush_upgrade_gather_information(&$fsm_context) {
             // Might some of these need to be enabled? No, I think we just skip the 'disable' step for this module, since it is now core
             $fsm_context['unavailable_extensions'][] = $extension_name;
           }
-          // n.b.: Previously, we would skip $extension_name if $project existed in destination: (!isset($destination_core) || (!is_dir($destination_core . '/sites/all/modules/' . $project) && !is_dir($destination_core . '/' . $destination_conf_path . '/modules/' . $project)))) {
-          // We have a different way to handle this now.
           else {
             $fsm_context['contrib_to_upgrade'][] = $extension_name;
             if ($fsm_context['extension_info'][$extension_name]->type == 'module') {
@@ -1688,17 +1683,110 @@ function drush_upgrade_gather_information(&$fsm_context) {
             // If there is a special warning about a project, then add it
             // to the warning list for later reporting.
             if (array_key_exists($project . ':' . $extension_name, $fsm_context['special_projects']['warning'])) {
-              $fsm_context['special_warning'][$project] = $fsm_context['special_projects']['warning'][$project . ':' . $extension_name];
+              $fsm_context['special_warning'][$project][$extension_name] = $fsm_context['special_projects']['warning'][$project . ':' . $extension_name];
             }
-            elseif ((array_key_exists($project, $fsm_context['special_projects']['warning'])) && (!array_key_exists($project, $fsm_context['special_warning']))) {
-              $fsm_context['special_warning'][$project] = $fsm_context['special_projects']['warning'][$project];
+            elseif (array_key_exists($project, $fsm_context['special_projects']['warning'])) {
+              $fsm_context['special_warning'][$project][0] = $fsm_context['special_projects']['warning'][$project];
             }
           }
         }
       }
     }
   }
+  // Add the projects from 'selected alternatives' to the end of the download list
+  foreach ($fsm_context['selected_alternatives'] as $module => $info) {
+    $alternate_project = $info['alternate-project'];
+    $fsm_context['project_download_list'][$alternate_project][] = $module;
+    // Look up the title of the project we're adding to the download list
+    $v = drush_invoke_process("@none", "pm-releases", array($alternate_project));
+    $fsm_context['project_info_map'][$alternate_project]['name'] = $v['object'][$alternate_project]['title'];
+    $fsm_context['project_info_map'][$alternate_project]['alternate-of'][] = $module;
+  }
   return TRUE;
+}
+
+function drupal_site_upgrade_build_special_project_list(&$fsm_context) {
+  // Make a list of all of the extensions to download.  We will
+  // download everything in the contrib extension list, but we
+  // will skip projects that already exist.
+  $fsm_context['special_projects'] = drush_upgrade_project_map($fsm_context['target_version']);
+
+  // Take all of the project alternatives and put them into another
+  // map keyed by the original module name.
+  $modules_with_alternatives = array();
+  foreach ($fsm_context['special_projects']['project-alternatives'] as $alternative_project => $info) {
+    foreach ($info['module-remap'] as $original_module => $alternate_module) {
+      if (array_key_exists($original_module, $fsm_context['extension_info'])) {
+        $modules_with_alternatives[$original_module][$alternative_project] = $info;
+      }
+    }
+  }
+
+  // Make a list of all modules in every project in a temporary array; we will remove items as modules are remapped
+  $remaining_modules_in_original_project = array();
+  foreach ($fsm_context['contrib_extensions'] as $original_module) {
+    if (array_key_exists('project',$fsm_context['extension_info'][$original_module]->info )) {
+      $original_project = $fsm_context['extension_info'][$original_module]->info['project'];
+      $remaining_modules_in_original_project[$original_project][$original_module] = $original_module;
+    }
+  }
+  // Get a list of preferred alternative projects from the user.
+  $preferred = drush_get_option_list('preferred');
+
+  // Reduce the modules with alternatives to a secondary list containing
+  // only the selected alternative.  We assume that the first listed is
+  // best if there is no explicitly-selected option.
+  $selected_alternatives = array();
+  foreach ($modules_with_alternatives as $original_module => $alternative_projects) {
+    $best_alternate = FALSE;
+    $best_weight = 0;
+    foreach ($alternative_projects as $alternative_project => $info) {
+      $weight = 1;
+      if (in_array($alternative_project, $preferred)) {
+        $weight += 10;
+      }
+      // TODO: maybe bump the weight of the project exists in the site, or exists in the cache?
+      if ($weight > $best_weight) {
+        $best_weight = $weight;
+        $best_alternate = $alternative_project;
+      }
+    }
+    // Store the selected alternative into the selected alternatives array
+    // keyed by original module, and containing the following fields:
+    //   'alternate-project'
+    //   'description'
+    //   'alternate-module'
+    //   'other-alternates'
+    $selected_alternatives[$original_module]['alternate-project'] = $best_alternate;
+    $selected_alternatives[$original_module]['description'] = $alternative_projects[$best_alternate]['description'];
+    $selected_alternatives[$original_module]['alternate-module'] = $alternative_projects[$best_alternate]['module-remap'][$original_module];
+    $selected_alternatives[$original_module]['other-alternatives'] = array_diff(array_keys($alternative_projects), array($best_alternate));
+    
+    // Remove remapped modules, so that we can determine when all modules from a given project have replacements
+    $original_project = $fsm_context['extension_info'][$original_module]->info['project'];
+    unset($remaining_modules_in_original_project[$original_project][$original_module]);
+  }
+  $fsm_context['selected_alternatives'] = $selected_alternatives;
+
+  // Fill in the module remap, project remap and module project relocation based on
+  // the selected alternative modules.
+  foreach ($selected_alternatives as $original_module => $info) {
+    $original_project = $fsm_context['extension_info'][$original_module]->info['project'];
+    $fsm_context['special_projects']['module-remap'][$original_module] = $info['alternate-module'];
+    $fsm_context['special_projects']['module-project-relocation'][$info['alternate-module']] = $info['alternate-project'];
+    // project-remap should only be used if all modules in the project move. If just one is relocated, we should not remap the whole project.
+    if (empty($remaining_modules_in_original_project[$original_project])) {
+      $fsm_context['special_projects']['project-remap'][$original_project] = $info['alternate-project'];
+    }
+    if (!empty($info['other-alternatives'])) {
+      $alternate_name = $info['alternate-project'];
+      if ($info['alternate-project'] != $info['alternate-module']) {
+        $alternate_name .= ':' . $info['alternate-module'];
+      }
+      $fsm_context['special_warning'][$original_project][$original_module] = dt("!project: The module !module in this project has no D!version version available, but there are multiple alternative projects that may be used instead. Drush picked !alternate, but !other also available.  Run again with --preferred to select a different preference.",
+        array('!project' => $original_project, '!module' => $original_module, '!version' => $fsm_context['target_version'], '!alternate' => $alternate_name, '!other' => implode(',', $info['other-alternatives'])));
+    }
+  }
 }
 
 function drush_upgrade_check_modules_and_themes(&$fsm_context, $control) {
@@ -1706,7 +1794,6 @@ function drush_upgrade_check_modules_and_themes(&$fsm_context, $control) {
   $ready_to_upgrade = TRUE;
   $source_version = $fsm_context['source_version'];
   $target_version = $fsm_context['target_version'];
-  $target_key = $fsm_context['target_key'];
   if (array_key_exists('destination_core', $fsm_context)) {
     $destination_core = $fsm_context['destination_core'];
     $destination_conf_path = $fsm_context['destination_conf_path'];
@@ -1720,55 +1807,88 @@ function drush_upgrade_check_modules_and_themes(&$fsm_context, $control) {
     drush_print(dt("--core-only option specified; Drush will upgrade Drupal core only."));
   }
   else {
+    drush_upgrade_generate_information_messages($fsm_context);
     $rows[] = array(dt('Project'), dt('Title'), dt('Installed'), dt('Available'), dt('Status'));
     // Consider each project from the contrib extensions and check with PM to see if there is
     // a recommended release available to download.  If there is NO release available, then
     // we are not ready to upgrade (but still can, without that project); if there is no RECOMMENDED
     // release, then we might not be ready to upgrade (but still can, with a non-recommended release).
     if (!empty($fsm_context['project_download_list'])) {
-      $result = drush_invoke_process('@none', 'pm-releases', array_keys($fsm_context['project_download_list']), array('default-major' => $target_version), array('integrate' => FALSE, 'override-simulated' => TRUE, 'log' => FALSE));
-      $project_releases = $result['object'];
+      $remapped_project_download_list = array();
       foreach ($fsm_context['project_download_list'] as $project => $extension_list) {
-        if (!array_key_exists($project, $project_releases) || empty($project_releases[$project]['releases'])) {
+        $project_to_download = $project;
+        // Check our lookup table to see if a project has been renamed.
+        if (array_key_exists($project, $fsm_context['special_projects']['project-remap'])) {
+          $project_to_download = $fsm_context['special_projects']['project-remap'][$project];
+        }
+        $remapped_project_download_list[] = $project_to_download;
+      }
+      $result = drush_invoke_process('@none', 'pm-releases', $remapped_project_download_list, array('default-major' => $target_version), array('integrate' => FALSE, 'override-simulated' => TRUE, 'log' => FALSE));
+      $project_releases = $result['object'];
+      if (!is_array($project_releases)) {
+        return drush_set_error('DRUSH_SITE_UPGRADE_NO_RELEASE_INFO', dt("Could not get release information via drush pm-releases."));
+      }
+      // n.b. $extension_list contains the _original_ module names; for example, in a d6-to-d7 upgrade, we might find 'redirect' => array('globalredirect', 'path_redirect'), since both globalredirect and path_redirect remap to the D7 'redirect' module.
+      $project_upgrade_information = array();
+      foreach ($fsm_context['project_download_list'] as $project => $extension_list) {
+        $project_to_download = $project;
+        $alternate_message = '';
+        // Check our lookup table to see if a project has been renamed.
+        if (array_key_exists($project, $fsm_context['special_projects']['project-remap'])) {
+          $alternate_message = '; using ' . $fsm_context['special_projects']['project-remap'][$project];
+          $fsm_context['special_warning'][$project][0] = dt("!project: this project has been replaced by the project !newproject.  The new project will be downloaded automatically.",
+            array('!project' => $project, '!newproject' => $fsm_context['special_projects']['project-remap'][$project]));
+        }
+
+        if (!array_key_exists($project_to_download, $project_releases) || empty($project_releases[$project_to_download]['releases'])) {
           $fsm_context['unavailable_extensions'] = array_merge($fsm_context['unavailable_extensions'], $extension_list);
           $ready_to_upgrade = FALSE;
           $available_version = '-';
           $status = dt("NO !major_version RELEASES", array('!major_version' => $target_version . ".x"));
         }
         else {
-          $all_versions = array_keys($project_releases[$project]['releases']);
+          $all_versions = array_keys($project_releases[$project_to_download]['releases']);
           $available_version = $all_versions[0];
-          if (empty($project_releases[$project]['recommended'])) {
+          if (empty($project_releases[$project_to_download]['recommended'])) {
             $ready_to_upgrade = 'maybe';
-            $status = implode(',', $project_releases[$project]['releases'][$available_version]['release_status']);
+            $status = implode(',', $project_releases[$project_to_download]['releases'][$available_version]['release_status']);
           }
           else {
             $status = dt('Recommended');
           }
         }
         $title = $fsm_context['project_info_map'][$project]['name'];
-        $installed_version = $fsm_context['project_info_map'][$project]['version'];
-        $rows[] = array($project, $title, $installed_version, $available_version, $status);
+        $installed_version = array_key_exists('version', $fsm_context['project_info_map'][$project]) ? $fsm_context['project_info_map'][$project]['version'] : '(' . implode(',', $fsm_context['project_info_map'][$project]['alternate-of']) . ')';
+        $project_upgrade_information[$project] = array('title' => $title, 'installed' => $installed_version, 'available' => $available_version, 'status' => $status . $alternate_message);
+      }
+      foreach ($project_upgrade_information as $project => $info) {
+        $rows[] = array($project, $info['title'], $info['installed'], $info['available'], $info['status']);
       }
     }
     drush_print_table($rows);
 
+    if (!empty($in_core) || !empty($fsm_context['special_warning'])) {
+      drush_print(dt("Special notes about some of the projects you are using:"));
+    }
     // Print out some messages about projects that migrated  to core, or modules that will require special processing.
     if (!empty($in_core)) {
       drush_log(dt('The following contrib modules were enabled in your Drupal site, but are now standard in core: !in_core.  These modules may need to be reconfigured after the upgrade is complete.', array('!in_core' => implode(', ', $in_core))), 'ok');
     }
-    foreach ($fsm_context['special_warning'] as $project => $warning) {
-      if ($warning === TRUE) {
-        $warning = 'Please see !project_page and !source for more information on how to do this.';
+    foreach ($fsm_context['special_warning'] as $project => $warnings) {
+      foreach ($warnings as $module => $warning) {
+        if ($warning === TRUE) {
+          $warning = '!special  Please see !project_page and !source for more information on how to do this.';
+        }
+        if ($warning === FALSE) {
+          $warning = '!special  So far there is no indication of when a migration path will be provided.  Check !project_page for updates.';
+          $ready_to_upgrade = 'maybe';
+        }
+        $special = dt("!project: this project which requires data migration or other special processing.", array('!project' => $project));
+        drush_log(dt("$warning", array('!special' => $special, '!project' => $project, '!project_page' => 'http://drupal.org/project/' . $project, '!source' => $fsm_context['special_projects']['source'])), 'warning');
       }
-      if ($warning === FALSE) {
-        $warning = 'So far there is no indication of when a migration path will be provided.  Check !project_page for updates.';
-        $ready_to_upgrade = 'maybe';
-      }
-      drush_log(dt("You are using the project !project, which requires data migration or other special processing.  $warning", array('!project' => $project, '!project_page' => 'http://drupal.org/project/' . $project, '!source' => $fsm_context['special_projects']['source'])), 'warning');
     }
   }
-  if (drush_upgrade_site_upgrade_check_parameters($target_key) === FALSE) {
+  if (drush_upgrade_site_upgrade_check_parameters($fsm_context) === FALSE) {
     return FALSE;
   }
 
@@ -1813,125 +1933,192 @@ function drush_upgrade_project_map($target_version) {
     'warning' => array(),
   );
   if ($target_version == 7) {
+    //
+    // Project alternatives lists Drupal 7 contrib projects that 
+    // may be used in place of Drupal 6 contrib modules that may
+    // or may not have versions in Drupal 7.  Each entry
+    // in the alternatives list contains a 'module-remap',
+    // which is an associative array that remaps the Drupal 6
+    // module name to the corresponding module in the Drupal 7
+    // project.  Note that the Drupal 6 project name does not
+    // need to be specified; Drush site-upgrade can determine
+    // that on its own.
+    //
+    // Example:
+    //
+    // The project http://drupal.org/project/redirect
+    // provides a new module called "redirect" that replaces
+    // the D6 contrib modules "globalredirect" and "path_redirect".
+    // Its entry in project alternatives therefore looks like this:
+    //
+    //     'redirect' => array(
+    //       'module-remap' => array(
+    //         'globalredirect' => 'redirect',
+    //         'path_redirect' => 'redirect',
+    //       ),
+    //     ),
+    //
+    // A 'description' entry may also be provided.
+    //
+    // Note that it is possible to have multiple project alternatives for
+    // any given D6 contrib module.  The user will have to select the
+    // desired upgrade path if this is the case.
+    //
+    $project_alternatives = array(
+       'redirect' => array(
+         'description' => 'The redirect project provides replacement functionality for the globalredirect and path_redirect projects.',
+         'module-remap' => array(
+           'globalredirect' => 'redirect',
+           'path_redirect' => 'redirect',
+         ),
+       ),
+       'bundle_copy' => array(
+         'description' => '',
+         'module-remap' => array(
+           'content_copy' => 'bundle_copy',
+         ),
+       ),
+       'field_permissions' => array(
+         'description' => '',
+         'module-remap' => array(
+           'content_permissions' => 'field_permissions',
+         ),
+       ),
+       'field_group' => array(
+         'description' => '',
+         'module-remap' => array(
+           'fieldgroup' => 'field_group',
+         ),
+       ),
+       'ctools' => array(
+         'description' => '',
+         'module-remap' => array(
+           'views_export' => 'bulk_export',
+         ),
+       ),
+       'references' => array(
+         'description' => '',
+         'module-remap' => array(
+           'nodereference' => 'node_reference',
+           'userreference' => 'user_reference',
+         ),
+       ),
+       'entityreference' => array(
+         'description' => '',
+         'module-remap' => array(
+           'nodereference' => 'entityreference',
+           'userreference' => 'entityreference',
+         ),
+       ),
+    );
+    //
+    // Projects in core lists Drupal 6 contrib projects
+    // that are now included in Drupal 7 core.
+    //
+    $projects_in_core = array(
+      'abssrc',
+      'admin_hover',
+      'adminrole',
+      'ahah_helper',
+      'autoload',
+      'automaticmenu',
+      'automenu',
+      'auto_menutitle',
+      'block_edit',
+      'block_node_visibility',
+      'blocks404',
+      'canonical_url',
+      'checkbox_validate',
+      'comment_display',
+      'config_perms',
+      'ctm',
+      'dbtng',
+      'documentation',
+      'drupal_queue',
+      'edit_term',
+      'elements',
+      'element_themehook',
+      'filefield',
+      'filter_default',
+      'hook_file',
+      'imageapi',
+      'imagecache',
+      'imagefield',
+      'input_format_permissions',
+      'jq',
+      'jqp',
+      'jquery_cookie',
+      'jquery_form_update',
+      'jquery_ui',
+      'jsalter',
+      'login_security',
+      'menuless_nodetype',
+      'nodepreview_by_type',
+      'parallel',
+      'permissions_api',
+      'phpass',
+      'plugin_manager',
+      'plugins',
+      'poormanscron',
+      'preview',
+      'rdf',
+      'shortlink',
+      'simplecdn',
+      'simpletest',
+      'storage_api',
+      'tar',
+      'taxidermy',
+      'tinymce_ahah',
+      'tinymce_dragdrop',
+      'transaction',
+      'upload_element',
+      'upload_preview',
+      'url_alter',
+      'user_cancellation',
+      'user_default_filter',
+      'user_delete',
+      'vertical_tabs',
+      'view_unpublished',
+      'vocabperms',
+      'wysiwygcck',
+    );
+    $modules_in_core = array(
+      // 'date' project is still contrib, but date_timezone, one of its modules, has moved to core. See http://drupal.org/node/868028.
+      'date_timezone',
+      // 'optionwidgets' has been replaced by the core module 'options' 
+      'optionwidgets',
+    );
     $result = array(
       'source' => 'http://drupal.org/node/895314',
-      'projects-in-core' => array(
-        'abssrc',
-        'admin_hover',
-        'adminrole',
-        'ahah_helper',
-        'autoload',
-        'automaticmenu',
-        'automenu',
-        'auto_menutitle',
-        'block_edit',
-        'block_node_visibility',
-        'blocks404',
-        'canonical_url',
-        'checkbox_validate',
-        'comment_display',
-        'config_perms',
-        'ctm',
-        'dbtng',
-        'documentation',
-        'drupal_queue',
-        'edit_term',
-        'elements',
-        'element_themehook',
-        'filefield',
-        'filter_default',
-        'hook_file',
-        'imageapi',
-        'imagecache',
-        'imagefield',
-        'input_format_permissions',
-        'jq',
-        'jqp',
-        'jquery_cookie',
-        'jquery_form_update',
-        'jquery_ui',
-        'jsalter',
-        'login_security',
-        'menuless_nodetype',
-        'nodepreview_by_type',
-        'parallel',
-        'permissions_api',
-        'phpass',
-        'plugin_manager',
-        'plugins',
-        'poormanscron',
-        'preview',
-        'rdf',
-        'shortlink',
-        'simplecdn',
-        'simpletest',
-        'storage_api',
-        'tar',
-        'taxidermy',
-        'tinymce_ahah',
-        'tinymce_dragdrop',
-        'transaction',
-        'upload_element',
-        'upload_preview',
-        'url_alter',
-        'user_cancellation',
-        'user_default_filter',
-        'user_delete',
-        'vertical_tabs',
-        'view_unpublished',
-        'vocabperms',
-        'wysiwygcck',
-      ),
-      'modules-in-core' => array(
-        // 'date' project is still contrib, but date_timezone, one of its modules, has moved to core. See http://drupal.org/node/868028.
-        'date_timezone',
-      ),
+      'project-alternatives' => $project_alternatives,
+      'projects-in-core' => $projects_in_core,
+      'modules-in-core' => $modules_in_core,
       // If a project changes name, then an entry
       // 'oldprojectname' => 'newprojectname' should be placed in this map.
       // 'project-remap' should only be used if the extensions in the project
       // all exist with the same name in the new project name.  If modules change
-      // name, hten 'module-remap' and 'module-project-relocation' should be
-      // used instead.
-      'project-remap' => array(),
-      // If an extension changes name, then an entry
-      // 'oldmodulename' => 'newmodulename' should be placed in this map.
-      // By default, it is assumed that the new module name exists in the
-      // same project as before.  If this is not the case, then an entry
-      // in the 'module-project-relocation' array should also be used.
+      // name, hten 'module-remap' and 'module-project-relocation' should also be
+      // used.
+      // If an extension changes name, but stays in the same
+      // project, then put an entry here from the original
+      // module name to the new module name.
       'module-remap' => array(
         'content' => 'cck',
-        'content_copy' => 'bundle_copy',
-        'content_permissions' => 'field_permissions',
-        'fieldgroup' => 'field_group',
-        // TODO: nodereference and userreference could optionally be migrated to entityreference. Which has the better upgrade path?
-        'nodereference' => 'node_reference',
-        'userreference' => 'user_reference',
-        'views_export' => 'bulk_export',
-        'optionwidgets' => 'options',
       ),
-      // The module-project-relocation array can be used to record modules
-      // that moved to a new project in Drupal 7.  Entries should be in
-      // the form 'modulename' => 'newprojectname'.  The module name should
-      // be the -new- module name for modules that appear in the module-remap
-      // array, or the existing module names for modules that did not change name.
-      'module-project-relocation' => array(
-        'bundle_copy' => 'bundle_copy',
-        'field_permissions' => 'field_permissions',
-        'field_group' => 'field_group',
-        'node_reference' => 'references',
-        'user_reference' => 'references',
-        'entityreference' => 'entityreference',
-        'bulk_export' => 'ctools',
-        'options' => 'drupal',
-      ),
+      // Drush site-upgrade will manage the module project relocation map
+      // automatically, based on information stored in the project alternatives.
+      'module-project-relocation' => array(),
+      // Drush site-upgrade will manage the project remap automatically,
+      // based on information stored in the project alternatives.
+      'project-remap' => array(),
       'warning' => array(
-        'token' => dt('In Drupal 7, the contrib token module handles UI, as well as field and profile tokens; all other functionality has been migrated to core.'),
+        'token' => dt('!special  In Drupal 7, the contrib token module handles UI, as well as field and profile tokens; all other functionality has been migrated to core.'),
         'cck' => TRUE,
-        'content_taxonomy' => dt('The project page for this module (!project_page) says that an upgrade path will be provided for this module at a future time.'),
-        'date:date_api' => dt("The d6 version of the date_api module in the date project defines a table called date_formats, which is also defined by system/system.install schema in d7.  If this problem has not been fixed yet, then the updatedb function will fail, and it will not be possible to upgrade to d7.  If this happens, disable and uninstall the date_api module before running site-upgrade (i.e. add '--uninstall=date_api' to site-upgrade call).  See http://drupal.org/node/1013034."),
+        'content_taxonomy' => dt('!special  The project page for this module (!project_page) says that an upgrade path will be provided for this module at a future time.'),
+        'date:date_api' => dt("!special  The d6 version of the date_api module in the date project defines a table called date_formats, which is also defined by system/system.install schema in d7.  If this problem has not been fixed yet, then the updatedb function will fail, and it will not be possible to upgrade to d7.  If this happens, disable and uninstall the date_api module before running site-upgrade (i.e. add '--uninstall=date_api' to site-upgrade call).  See http://drupal.org/node/1013034."),
         'field_taxonomy' => FALSE,
-        'filefield' => dt('Data migration for this module will be provided by the Content Migrate submodule of cck.  Enable content_migrate after upgrading; see http://drupal.org/node/781088.'),
-        'imagefield' => dt('Data migration for this module will be provided by the Content Migrate submodule of cck.  Enable content_migrate after upgrading; see http://drupal.org/node/781088.'),
+        'filefield' => dt('!special  Data migration for this module will be provided by the Content Migrate submodule of cck.  Enable content_migrate after upgrading; see http://drupal.org/node/781088.'),
+        'imagefield' => dt('!special  Data migration for this module will be provided by the Content Migrate submodule of cck.  Enable content_migrate after upgrading; see http://drupal.org/node/781088.'),
         'taxonomy_delegate' => FALSE,
         'taxonomy_intro' => FALSE,
         'term_fields' => FALSE,
