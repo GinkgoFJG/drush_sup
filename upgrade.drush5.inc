@@ -1973,38 +1973,38 @@ function drush_upgrade_project_map($target_version) {
          ),
        ),
        'bundle_copy' => array(
-         'description' => '',
+         'description' => 'The cck copy_content module was moved out into the bundle_copy module in D7.',
          'module-remap' => array(
            'content_copy' => 'bundle_copy',
          ),
        ),
        'field_permissions' => array(
-         'description' => '',
+         'description' => 'The cck content_permissions module moved to the field_permissions module in D7.',
          'module-remap' => array(
            'content_permissions' => 'field_permissions',
          ),
        ),
        'field_group' => array(
-         'description' => '',
+         'description' => 'The cck field_group module moved to the field_group module in D7.',
          'module-remap' => array(
            'fieldgroup' => 'field_group',
          ),
        ),
        'ctools' => array(
-         'description' => '',
+         'description' => 'The functionality of the views module views_export can now be handled by the ctools bulk export module.',
          'module-remap' => array(
            'views_export' => 'bulk_export',
          ),
        ),
        'references' => array(
-         'description' => '',
+         'description' => 'The cck node_reference and user_reference modules may be replaced by the references project in D7.',
          'module-remap' => array(
            'nodereference' => 'node_reference',
            'userreference' => 'user_reference',
          ),
        ),
        'entityreference' => array(
-         'description' => '',
+         'description' => 'The cck node_reference and user_reference modules may be replaced by the entityreference module in D7.',
          'module-remap' => array(
            'nodereference' => 'entityreference',
            'userreference' => 'entityreference',
@@ -2112,16 +2112,18 @@ function drush_upgrade_project_map($target_version) {
       // based on information stored in the project alternatives.
       'project-remap' => array(),
       'warning' => array(
-        'token' => dt('!special  In Drupal 7, the contrib token module handles UI, as well as field and profile tokens; all other functionality has been migrated to core.'),
+        'token' => dt('!special  In Drupal 7, the contrib token module handles UI, as well as field and profile tokens; all other functionality has been migrated to core. You may encounter problems when enabling the token module during a major upgrade; see http://drupal.org/node/1477932.'),
         'cck' => TRUE,
         'content_taxonomy' => dt('!special  The project page for this module (!project_page) says that an upgrade path will be provided for this module at a future time.'),
         'date:date_api' => dt("!special  The d6 version of the date_api module in the date project defines a table called date_formats, which is also defined by system/system.install schema in d7.  If this problem has not been fixed yet, then the updatedb function will fail, and it will not be possible to upgrade to d7.  If this happens, disable and uninstall the date_api module before running site-upgrade (i.e. add '--uninstall=date_api' to site-upgrade call).  See http://drupal.org/node/1013034."),
+        'features' => dt('IMPORTANT: If you are using features, you should import your features into the database using the features-import-all command.  See http://drupal.org/node/1014522#comment-5478110 for details.'),
         'field_taxonomy' => FALSE,
         'filefield' => dt('!special  Data migration for this module will be provided by the Content Migrate submodule of cck.  Enable content_migrate after upgrading; see http://drupal.org/node/781088.'),
         'imagefield' => dt('!special  Data migration for this module will be provided by the Content Migrate submodule of cck.  Enable content_migrate after upgrading; see http://drupal.org/node/781088.'),
         'taxonomy_delegate' => FALSE,
         'taxonomy_intro' => FALSE,
         'term_fields' => FALSE,
+        'uuid' => dt('IMPORTANT: Bug in uuid module:  Apply the patch at http://drupal.org/node/1469942 prior to enablind the uuid module to fix.  If you see error messages after updating uuid, you must restore to the latest working backup and then apply the aforementioned patch to the uuid module.'),
       ),
     );
   }
