@@ -224,14 +224,12 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     'callback' => 'drush_upgrade_check_modules_and_themes',
     'continue' => TRUE,
-    'next' => 'UPGRADE.txt Major Upgrade Prompt',
   );
   $stages['UPGRADE.txt Major Upgrade Prompt'] = array(
     'prompt' => 'Please review the upgread readiness report. You may want to uninstall modules that are not ready to upgrade yet.',
     'omit-stage-header' => TRUE,
     'no-op' => TRUE,
     'selection-options' => array('#skip' => 'Begin upgrade'),
-    'next' => 'UPGRADE.txt Major Upgrade Step 2',
   );
   $stages['UPGRADE.txt Major Upgrade Step 2'] = array(
     // TODO: Eventually we will be picking our finite state machine stages
@@ -247,7 +245,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'note' => 'You must also insure that all of your contrib modules are up to date!',
     'verify' => '_drush_upgrade_site_already_latest_version_drupal',
     'selection-options' => array('#skip' => 'Continue upgrade with out-of-date Drupal (Not recommended -- failure probable).'),
-    'next' => 'UPGRADE.txt Major Upgrade Step 3',
   );
   $stages['UPGRADE.txt Major Upgrade Step 3'] = array(
     'description' =>
@@ -256,7 +253,6 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     'continue' => TRUE,
     'unnecessary' => 'You will not need to log in if Drush is used to perform all upgrade steps for you.',
-    'next' => 'UPGRADE.txt Major Upgrade Step 4',
   );
   $stages['UPGRADE.txt Major Upgrade Step 4'] = array(
     'description' =>
@@ -270,7 +266,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'drush-arguments' => array('maintenance_mode', '1'),
     'drush-options' => array('always-set' => TRUE),
     'optional' => 'When Drush does the steps of your site upgrade, it always modifies the working copy of your site; the original site is left unchanged. You may wish to take your site off-line anyway.',
-    'next' => 'UPGRADE.txt Major Upgrade Step 5',
   );
   $stages['UPGRADE.txt Major Upgrade Step 5'] = array(
     'description' =>
@@ -279,7 +274,6 @@ function _drush_upgrade_site_upgrade_stages() {
            the default theme.
       ",
     'optional' => 'Drush will set the administrative theme to "Garland" in the target site without affecting the source site.',
-    'next' => 'UPGRADE.txt Major Upgrade Step 6',
   );
   $stages['UPGRADE.txt Major Upgrade Step 6'] = array(
     'description' =>
@@ -294,7 +288,6 @@ function _drush_upgrade_site_upgrade_stages() {
            tab after disabling them.
       ",
     'unnecessary' => 'Drush will automatically disable all non-core modules in the target site without affecting the source site. You may disable or uninstall contrib modules now if you wish; any that you do not do now will be disabled by Drush after Step 12.',
-    'next' => 'UPGRADE.txt Major Upgrade Step 7',
   );
   $stages['UPGRADE.txt Major Upgrade Step 7'] = array(
     'description' =>
@@ -304,7 +297,6 @@ function _drush_upgrade_site_upgrade_stages() {
              sites/default/default.settings.php
       ",
     'unnecessary' => 'Drush will remove default.settings.php from the target site later, after Step 12.  You may remove it from the source sit now if you wish, but doing so is unnecessary.',
-    'next' => 'UPGRADE.txt Major Upgrade Step 8',
   );
   $stages['UPGRADE.txt Major Upgrade Step 8'] = array(
     'description' =>
@@ -316,7 +308,6 @@ function _drush_upgrade_site_upgrade_stages() {
            need to re-apply them from your backup, after the new files are in place.
       ",
     'unnecessary' => 'Drush will create your upgraded site in a new location; it is not necessary to remove any core files from the source site.',
-    'next' => 'UPGRADE.txt Major Upgrade Step 9',
   );
   $stages['UPGRADE.txt Major Upgrade Step 9'] = array(
     'description' =>
@@ -326,7 +317,6 @@ function _drush_upgrade_site_upgrade_stages() {
            they are incompatible with Drupal 7.x.
       ",
     'unnecessary' => 'Drush will create your upgraded site in a new location; it is not necessary to remove any contrib module files from the source site.',
-    'next' => 'UPGRADE.txt Major Upgrade Step 10',
   );
   $stages['UPGRADE.txt Major Upgrade Step 10'] = array(
     'description' =>
@@ -353,7 +343,6 @@ function _drush_upgrade_site_upgrade_stages() {
     // TODO: If running in "reuse" mode, notify the user that Drupal is already in place, and skip this step. As it is, this step will seem to run, but will do nothing.
     'callback' => '_drush_upgrade_site_download_next_version_drupal',
     'straightforward' => TRUE,
-    'next' => 'UPGRADE.txt Major Upgrade Step 11',
   );
   $stages['UPGRADE.txt Major Upgrade Step 11'] = array(
     'description' =>
@@ -361,7 +350,6 @@ function _drush_upgrade_site_upgrade_stages() {
         11. Re-apply any modifications to files such as .htaccess or robots.txt.
       ",
     'not-always-needed' => "If you had no modifications to .htaccess or robots.txt, you don't need to do anything here.",
-    'next' => 'UPGRADE.txt Major Upgrade Step 12',
   );
   $stages['UPGRADE.txt Major Upgrade Step 12'] = array(
     'description' =>
@@ -374,7 +362,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'note' => 'Note that Drush will instead *copy* your settings.php file to its new location.  The copy is made writable, but the original may remain write-protected.',
     'callback' => '_drush_upgrade_site_make_settings_writable',
     'straightforward' => TRUE,
-    'next' => 'UPGRADE.txt Major Upgrade Step 12-a',
   );
   $stages['UPGRADE.txt Major Upgrade Step 12-a'] = array(
     'description' =>
@@ -388,7 +375,6 @@ function _drush_upgrade_site_upgrade_stages() {
       ",
     'callback' => '_drush_upgrade_site_copy_database_and_disable_contrib',
     'straightforward' => TRUE,
-    'next' => 'UPGRADE.txt Major Upgrade Step 12-b',
   );
   $stages['UPGRADE.txt Major Upgrade Step 12-b'] = array(
     'description' =>
@@ -399,7 +385,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'verify' => '_drush_upgrade_site_verify_default_settings_removed',
     'callback' => '_drush_upgrade_site_remove_default_settings',
     'straightforward' => TRUE,
-    'next' => 'UPGRADE.txt Major Upgrade Step 13',
   );
   $stages['UPGRADE.txt Major Upgrade Step 13'] = array(
     'description' =>
@@ -425,7 +410,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'drush-command' => 'updatedb',
     'drush-site' => '@upgrade-target',
     'drush-backend-options' => array('interactive' => TRUE),
-    'next' => 'UPGRADE.txt Major Upgrade Step 14',
   );
   $stages['UPGRADE.txt Major Upgrade Step 14'] = array(
     'description' =>
@@ -436,7 +420,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'backup_message' => "Upgraded Core",
     'straightforward' => TRUE,
     'callback' => '_drush_upgrade_site_backup_after_updatedb',
-    'next' => 'UPGRADE.txt Major Upgrade Step 15',
   );
   $stages['UPGRADE.txt Major Upgrade Step 15'] = array(
     'description' =>
@@ -449,7 +432,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'verify' => '_drush_site_upgrade_select_contrib_module_to_upgrade',
     'callback' => '_drush_site_upgrade_prepare_module_upgrade',
     'next' => array(
-      'ok' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 1',
       '#done' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Finish Up',
     ),
   );
@@ -462,7 +444,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'no-op' => TRUE,
     'required' => TRUE,
     'next' => array(
-      'ok' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 2',
       '#postpone' => 'UPGRADE.txt Major Upgrade Step 15',
     ),
   );
@@ -472,7 +453,6 @@ function _drush_upgrade_site_upgrade_stages() {
          2. Fully remove the old module directory inside sites/all/modules/
       ",
     'unnecessary' => 'Note that Drush builds the target site in a new directory; the modules directory therefore starts off empty, and there is therefore no need to delete anything. If there is for some reason an old module directory in place, Drush will automatically delete it when downloading the new module.',
-    'next' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 3',
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 3'] = array(
     'description' =>
@@ -484,7 +464,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'verify' => '_drush_site_upgrade_verify_module_code_exists',
     'verify-message' => 'The correct module already exists at the destination directory.',
     'callback' => '_drush_site_upgrade_get_module_code',
-    'next' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 4',
   );
   $stages['Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 4'] = array(
     'description' =>
@@ -494,7 +473,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'straightforward' => TRUE,
     'callback' => '_drush_site_upgrade_enable_module',
     'next' => array(
-      'ok' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 5',
       'error' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Enable Errors',
     ),
   );
@@ -511,7 +489,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'drush-options' => array('yes' => TRUE),
     'drush-backend-options' => array('interactive' => TRUE),
     'next' => array(
-      'ok' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Step 6',
       'error' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Handle Update Errors',
     ),
   );
@@ -562,7 +539,6 @@ function _drush_upgrade_site_upgrade_stages() {
         A. Copy files directory from the source site to the upgrade site.
       ",
     'callback' => '_drush_site_upgrade_copy_files',
-    'next' => 'Post-upgrade Step B',
   );
   $stages['Post-upgrade Step B'] = array(
     'description' =>
@@ -570,7 +546,6 @@ function _drush_upgrade_site_upgrade_stages() {
         B. Enable the core module content_migrate.
       ",
     'callback' => '_drush_site_upgrade_enable_content_migrate',
-    'next' => 'Post-upgrade Step C',
   );
   $stages['Post-upgrade Step C'] = array(
     'description' =>
@@ -578,7 +553,6 @@ function _drush_upgrade_site_upgrade_stages() {
         C. Fix up some file system permissions.
       ",
     'callback' => '_drush_site_upgrade_fix_permissions',
-    'next' => 'Post-upgrade Step D',
   );
   $stages['Post-upgrade Step D'] = array(
     'description' =>
@@ -586,7 +560,6 @@ function _drush_upgrade_site_upgrade_stages() {
         D. Run cron, for good measure.
       ",
     'callback' => '_drush_site_upgrade_run_cron',
-    'next' => 'UPGRADE.txt Major Upgrade Step 16',
   );
   $stages['UPGRADE.txt Major Upgrade Step 16'] = array(
     'description' =>
@@ -597,7 +570,6 @@ function _drush_upgrade_site_upgrade_stages() {
     'note' => 'Drush can also show you this information in the console via the `drush status-report` command.',
     'drush-command' => 'status-report',
     'drush-site' => '@upgrade-target',
-    'next' => 'UPGRADE.txt Major Upgrade Step 17',
   );
   $stages['UPGRADE.txt Major Upgrade Step 17'] = array(
     'description' =>
@@ -605,7 +577,6 @@ function _drush_upgrade_site_upgrade_stages() {
         17. Ensure that \$update_free_access is FALSE in settings.php.
       ",
     'straightforward' => TRUE,
-    'next' => 'UPGRADE.txt Major Upgrade Step 18',
   );
   $stages['UPGRADE.txt Major Upgrade Step 18'] = array(
     'description' =>
@@ -943,7 +914,7 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       'verify-message' => FALSE,
       'prompt' => 'What would you like to do?',
       'selection-options' => array(),
-      'next' => 'STOP',
+      'next' => array(),
     );
     // TODO: call an 'alter' callback on the control structure (YNGNI?)
     if ($control['prepare']) {
@@ -953,6 +924,17 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       $control['next'] = array('ok' => $control['next']);
     }
     $control['next'] += array('error' => 'STOP');
+    if (!array_key_exists('ok', $control['next'])) {
+      // Find the next stage in the fsm
+      $all_stages = array_keys($stages);
+      $position = array_search($stage, $all_stages);
+      if (isset($all_stages[$position + 1])) {
+        $control['next']['ok'] = $all_stages[$position + 1];
+      }
+      else {
+        $control['next']['ok'] = 'STOP';
+      }
+    }
     if (!$control['omit-stage-header']) {
       drush_print("\n" . str_pad("", drush_get_context('DRUSH_COLUMNS', 80) - 2, ':'). "\n" . $stage);
     }
