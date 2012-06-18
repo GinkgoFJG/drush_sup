@@ -1382,11 +1382,11 @@ function _drush_site_upgrade_get_module_code(&$fsm_context, &$control) {
 }
 
 function _drush_site_upgrade_enable_module(&$fsm_context, &$control) {
-  return _drush_site_upgrade_enable_specified_module($fsm_context, &$control, $fsm_context['module_to_upgrade']);
+  return _drush_site_upgrade_enable_specified_module($fsm_context, $control, $fsm_context['module_to_upgrade']);
 }
 
 function _drush_site_upgrade_enable_content_migrate(&$fsm_context, &$control) {
-  return _drush_site_upgrade_enable_specified_module($fsm_context, &$control, 'content_migrate');
+  return _drush_site_upgrade_enable_specified_module($fsm_context, $control, 'content_migrate');
 }
 
 function _drush_site_upgrade_enable_specified_module(&$fsm_context, &$control, $specified_module) {
