@@ -96,8 +96,8 @@ function upgrade_drush_command() {
  *
  *    Shown to the user before the stage begins.  When running with --prompt,
  *    the user will be asked whether to perform the step, skip it (do it manually)
- *    or to stop.  Perhaps this should be the default, and --no-prompt should be 
- *    required to skip prompts.  Note that other confirmations will come up under 
+ *    or to stop.  Perhaps this should be the default, and --no-prompt should be
+ *    required to skip prompts.  Note that other confirmations will come up under
  *    --no-prompt; as usual, these may be skiped with --yes.
  *
  *  - omit-stage-header:
@@ -117,7 +117,7 @@ function upgrade_drush_command() {
  *    The name of a function callback that Drush will call to verify whether
  *    or not the current step, perhaps, may already have been performed.  If
  *    the verify function returns TRUE, then the current step will be skipped
- *    with a $stage_result of TRUE, without prompting the user.  Otherwise, the 
+ *    with a $stage_result of TRUE, without prompting the user.  Otherwise, the
  *    stage will run as usual.
  *
  *  - verify-message:
@@ -137,7 +137,7 @@ function upgrade_drush_command() {
  *
  *  - next:
  *
- *    In its simplest form, 'next' is a string that describes the next 
+ *    In its simplest form, 'next' is a string that describes the next
  *    stage to proceed to.  The following are equivalent:
  *
  *      'next' => 'name of next stage',
@@ -366,8 +366,8 @@ function _drush_upgrade_site_upgrade_stages() {
   $stages['UPGRADE.txt Major Upgrade Step 12-a'] = array(
     'description' =>
       "
-        12-a. Drush-specific step:  Drush will now do steps 5 and 6 of UPGRADE.txt, 
-              and set the site theme to Garland and disable all contrib modules.  
+        12-a. Drush-specific step:  Drush will now do steps 5 and 6 of UPGRADE.txt,
+              and set the site theme to Garland and disable all contrib modules.
               Before it does this, it makes a copy of your database, and does
               all modifications on the *copy*, leaving your source site unchanged.
               Drush will also uninstall all modules specified via the --uninstall option
@@ -409,6 +409,7 @@ function _drush_upgrade_site_upgrade_stages() {
     'note' => 'Note that Drush will copy your database and run updatedb on the copy.  The source database remains unchanged.',
     'drush-command' => 'updatedb',
     'drush-site' => '@upgrade-target',
+    'drush-options' => array('yes' => TRUE),
     'drush-backend-options' => array('interactive' => TRUE),
   );
   $stages['UPGRADE.txt Major Upgrade Step 14'] = array(
@@ -698,7 +699,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
 
   // TODO: Look up appropriate upgrade stages for the version of Drupal being upgraded.
   $stages = _drush_upgrade_site_upgrade_stages();
- 
+
   // Partial feature: start at some stage in the middle.
   // Warning: does not validate whether site is in any condition
   // to resume at this stage or not. Use at your own risk!
@@ -789,7 +790,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
             $options[$backup_name] = dt("Restore backup '!message' and resume upgrade", array('!message' => $backup_context['backup_message']));
           }
         }
-        
+
         $selection = drush_choice($options, dt("A Drupal site exists at the destination. What would you like to do?"));
         // Selected a backup item?
         if (array_key_exists($selection, $backups)) {
@@ -798,7 +799,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
           $stage = $fsm_context['stage'];
           drush_upgrade_site_upgrade_progress($fsm_context);
           drush_delete_dir($fsm_context['destination_core'], TRUE);
-          $values = drush_invoke_process('@none', 'archive-restore', array($archive), array('destination' => $fsm_context['destination_core'], 'overwrite' => TRUE));
+          $values = drush_invoke_process('@none', 'archive-restore', array($archive), array('destination' => $fsm_context['destination_core'], 'overwrite' => TRUE), array('integrate' => FALSE));
         }
         else {
           switch ($selection) {
@@ -1030,7 +1031,7 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
     }
     // TODO: call a 'post selection' callback on the control structure (YNGNI?)
     // If the user's selection has the same key as one of the 'next' steps,
-    // this overrides the callback item, and advances the FSM directly to 
+    // this overrides the callback item, and advances the FSM directly to
     // the specified stage.
     if (array_key_exists($control['selection'], $control['next'])) {
       $stage_result = $control['selection'];
@@ -1092,7 +1093,7 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
     }
     // If a backup was requested, make it now.
     if ($backup_file) {
-      $values = drush_invoke_process($fsm_context['target_key'], 'archive-dump', array(), array('destination' => $backup_file, 'overwrite' => TRUE));
+      $values = drush_invoke_process($fsm_context['target_key'], 'archive-dump', array(), array('destination' => $backup_file, 'overwrite' => TRUE), array('integrate' => FALSE));
     }
   }
 }
@@ -1113,19 +1114,19 @@ function _drush_upgrade_site_drush_command(&$fsm_context, $control) {
 }
 
 function _drush_upgrade_site_already_offline(&$fsm_context, $control) {
-  $result = drush_invoke_process('@self', 'variable-get', array('maintenance_mode'));
+  $result = drush_invoke_process('@self', 'variable-get', array('maintenance_mode'), array(), array('integrate' => FALSE));
   $site_offline = is_array($result['object']) ? array_values($result['object']) : array();
   return (count($site_offline) > 0) && ($site_offline[0] == 1);
 }
 
 function _drush_upgrade_site_already_online(&$fsm_context, $control) {
-  $result = drush_invoke_process('@self', 'variable-get', array('maintenance_mode'));
+  $result = drush_invoke_process('@self', 'variable-get', array('maintenance_mode'), array(), array('integrate' => FALSE));
   $site_offline = is_array($result['object']) ? array_values($result['object']) : array();
   return (count($site_offline) == 0) || ($site_offline[0] == 0);
 }
 
 function _drush_upgrade_site_already_latest_version_drupal(&$fsm_context, $control) {
-  $result = drush_invoke_process('@self', 'pm-releases', array('drupal'));
+  $result = drush_invoke_process('@self', 'pm-releases', array('drupal'), array(), array('integrate' => FALSE));
   $installed = $result['object']['drupal']['installed'];
   $latest = array_shift(array_keys($result['object']['drupal']['releases']));
   drush_print();
@@ -1183,7 +1184,7 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
       }
       // Relocate the extension to another project if it moved
       if (array_key_exists($extension, $fsm_context['special_projects']['module-project-relocation'])) {
-        $project = $fsm_context['special_projects']['module-project-relocation'][$extension];     
+        $project = $fsm_context['special_projects']['module-project-relocation'][$extension];
       }
       // Remap the project if its name changed
       elseif (array_key_exists($extension, $fsm_context['special_projects']['project-remap'])) {
@@ -1211,9 +1212,9 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
   // additional modules become available, we want to catch them at some point.
   // TODO: Maybe we should at least suppress the warning message to eliminate noise.
   if (!empty($projects_to_download)) {
-    $values = drush_invoke_process('@none', 'pm-download', 
-      array_keys($projects_to_download), 
-      array('destination' => $fsm_context['project_cache']), 
+    $values = drush_invoke_process('@none', 'pm-download',
+      array_keys($projects_to_download),
+      array('destination' => $fsm_context['project_cache']),
       array('integrate' => FALSE));
   }
   // Make a list of extensions that still need to be upgraded
@@ -1281,7 +1282,7 @@ function _drush_site_upgrade_select_contrib_module_to_upgrade(&$fsm_context, &$c
       $extensions_with_problems[$extension] = $label . ' [[' . $fsm_context['extensions_with_problems'][$extension]['message'] . ']]';
     }
   }
-  // If there are no extensions without problems remaining (and ready for upgrade), 
+  // If there are no extensions without problems remaining (and ready for upgrade),
   // but there still are extensions with problems, then un-set 'auto' mode
   // so that the user will be prompted about what to do next.
   if (empty($extensions_without_problems) && !empty($extensions_with_problems)) {
@@ -1403,22 +1404,22 @@ function _drush_site_upgrade_enable_specified_module(&$fsm_context, &$control, $
     $fsm_context['extensions_with_problems'][$specified_module] = array('message' => dt("Error: failed to enable."));
     return FALSE;
   }
-  return TRUE;  
+  return TRUE;
 }
 
 function _drush_site_upgrade_fix_permissions(&$fsm_context, $control) {
   // The only thing we will do for now is make an attempt at making the 'files' directory writable
   // to clear up one more potential problem with the status report.
-  $result = drush_invoke_process($fsm_context['target_key'], "drupal-directory", array("%files"));
+  $result = drush_invoke_process($fsm_context['target_key'], "drupal-directory", array("%files"), array(), array('integrate' => FALSE));
   $files_dir = $result['object'];
   chmod(dirname($files_dir), 0777);
   chmod($files_dir, 0777);
   // TODO: The status report still says:
-  // "The directory temp does not exist. You may need to 
-  // set the correct directory at the file system       
-  // settings page or change the current directory's    
+  // "The directory temp does not exist. You may need to
+  // set the correct directory at the file system
+  // settings page or change the current directory's
   // permissions so that it is writable."
-  // Need to create the temp directory. 
+  // Need to create the temp directory.
   return TRUE;
 }
 
@@ -1482,7 +1483,7 @@ function _drush_upgrade_site_copy_database_and_disable_contrib(&$fsm_context, $c
   // When we first copy the database, its version will be the same as the source site.
   // We will advance its version by one after we run updatedb.
   $fsm_context['target_database_version'] = $fsm_context['source_version'];
-  
+
   if (!empty($fsm_context['contrib_extensions'])) {
     if (!_drush_upgrade_site_create_transition_site($fsm_context, $control)) {
       return FALSE;
@@ -1506,7 +1507,7 @@ function _drush_upgrade_site_remove_default_settings(&$fsm_context, $control) {
 function _drush_site_upgrade_copy_files(&$fsm_context, $control) {
   $source_site = '@self';
   $target_site = $fsm_context['target_key'];
-  $result = drush_invoke_process('@self', 'core-rsync', array($source_site . ':%files', $target_site . ':%files'), array('yes' => TRUE));
+  $result = drush_invoke_process('@self', 'core-rsync', array($source_site . ':%files', $target_site . ':%files'), array('yes' => TRUE), array('integrate' => FALSE));
   return ($result['error_status'] == 0);
 }
 
@@ -1680,7 +1681,7 @@ function drush_upgrade_generate_information_messages(&$fsm_context) {
     $alternate_project = $info['alternate-project'];
     $fsm_context['project_download_list'][$alternate_project][] = $module;
     // Look up the title of the project we're adding to the download list
-    $v = drush_invoke_process("@none", "pm-releases", array($alternate_project));
+    $v = drush_invoke_process("@none", "pm-releases", array($alternate_project), array(), array('integrate' => FALSE));
     $fsm_context['project_info_map'][$alternate_project]['name'] = $v['object'][$alternate_project]['title'];
     $fsm_context['project_info_map'][$alternate_project]['alternate-of'][] = $module;
   }
@@ -1743,7 +1744,7 @@ function drupal_site_upgrade_build_special_project_list(&$fsm_context) {
     $selected_alternatives[$original_module]['description'] = $alternative_projects[$best_alternate]['description'];
     $selected_alternatives[$original_module]['alternate-module'] = $alternative_projects[$best_alternate]['module-remap'][$original_module];
     $selected_alternatives[$original_module]['other-alternatives'] = array_diff(array_keys($alternative_projects), array($best_alternate));
-    
+
     // Remove remapped modules, so that we can determine when all modules from a given project have replacements
     $original_project = $fsm_context['extension_info'][$original_module]->info['project'];
     unset($remaining_modules_in_original_project[$original_project][$original_module]);
@@ -1916,7 +1917,7 @@ function drush_upgrade_project_map($target_version) {
   );
   if ($target_version == 7) {
     //
-    // Project alternatives lists Drupal 7 contrib projects that 
+    // Project alternatives lists Drupal 7 contrib projects that
     // may be used in place of Drupal 6 contrib modules that may
     // or may not have versions in Drupal 7.  Each entry
     // in the alternatives list contains a 'module-remap',
@@ -2067,7 +2068,7 @@ function drush_upgrade_project_map($target_version) {
     $modules_in_core = array(
       // 'date' project is still contrib, but date_timezone, one of its modules, has moved to core. See http://drupal.org/node/868028.
       'date_timezone',
-      // 'optionwidgets' has been replaced by the core module 'options' 
+      // 'optionwidgets' has been replaced by the core module 'options'
       'optionwidgets',
     );
     $result = array(
@@ -2150,26 +2151,25 @@ function drush_upgrade_site_upgrade_prepare() {
  * Download the upgraded version of Drupal for site-upgrade.
  */
 function drush_upgrade_download_drupal($target_version, $destination_core) {
-  // Fetch target core and place as per target alias root.
-  drush_set_option('destination', dirname($destination_core));
-  drush_set_option('drupal-project-rename', basename($destination_core));
-
-  // No need for version control in this command.
-  drush_set_option('version-control', 'backup');
-
   if (drush_get_context('DRUSH_SIMULATE')) {
     drush_log(dt("Simulated download of drupal-!version", array('!version' => $target_version)));
   }
   else {
-    // TODO: convert to drush_invoke_process; set --yes
-    drush_invoke('pm-download', 'drupal-' . $target_version);
-    if (drush_get_error()) return FALSE; // Early exit if we see an error.
+    // Fetch target core and place as per target alias root.
+    $dl_options['destination'] = dirname($destination_core);
+    $dl_options['drupal-project-rename'] = basename($destination_core);
+
+    // No need for version control in this command.
+    $dl_options['version-control'] = 'backup';
+    $dl_options['yes'] = TRUE;
+    $values = drush_invoke_process('@none', 'pm-download', array('drupal-' . $target_version), $dl_options, array('integrate' => FALSE));
 
     // Check and see if there is a Drupal site at the target.
     if (!file_exists($destination_core . '/includes/bootstrap.inc')) {
-      return drush_set_error('DRUSH_UPGRADE_NO_DRUPAL', dt('Drupal could not be downloaded to the target directory, @root.  Move existing content out of the way first.', array('@root' => $target_alias['root'])));
+      return drush_set_error('DRUSH_UPGRADE_NO_DRUPAL', dt('Drupal could not be downloaded to the target directory, @root.  Move existing content out of the way first.', array('@root' => $destination_core)));
     }
   }
+  return TRUE;
 }
 
 /**
