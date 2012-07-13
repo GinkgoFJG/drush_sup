@@ -220,15 +220,11 @@ just drop patches and custom versions there.
 
 Error checking on updatedb
 --------------------------
-If pm-enable fails, the module is added to a "problems" list and
-processing on it until later.  The same should be done when a
-module's updatedb fails. To recover from this, though, would require
-restoring the site from the last backup point.
-
-Updating core pauses for confirmation in updatedb
--------------------------------------------------
---yes should be specified, at least in 'auto' mode.
-Perhaps the prompt should only appear in --confirm-all mode.
+If updatedb fails, the module is added to a "problems" list and
+processing on it is deferred until later.  If an error is reported
+in updatedb, though, it might corrupt the database; perhaps the
+site-upgrade command should recomment restoring from backup before
+continuing with other modules.  The user may always do this manually, though.
 
 Refine Handling of Pre-upgrade Warning Messages
 -----------------------------------------------
@@ -239,18 +235,12 @@ and so on, so this message is not displayed unless failure is actually
 possible.  The 'post-processing needed' messages should be repeated
 once the upgrade is finished.
 
-Test if contrib modules need updates
-------------------------------------
+Test if contrib modules need updatedb
+-------------------------------------
 It would be helpful if we could sort out which contrib modules
 have update functions that need to run, and which do not. An
 indication of which modules required no updates could be given
 on the module-selection menu.
-
-Show progress so far
---------------------
-In step 15, when displaying the list of modules to be upgraded,
-also show a list of all contrib modules that have been successfully
-enabled and updated.
 
 Simulated mode
 --------------
@@ -259,18 +249,6 @@ If selected, Drush could set SIMULATED, run the selected step, and
 then return to prompt the user again.  We could also support a
 --simulate-first cli option that would automatically simulate every
 step before prompting the user.
-
-Automatic code upgrades
------------------------
-We could use the coder module to do a code upgrade of modules that
-do not have upgraded versions available yet.
-
-Upgrade In Place
-----------------
-Should it be possible to do an upgrade "in place", overwriting the
-source site?  While this is not the best way to do an upgrade, it
-might be of some benefit to users who wanted to follow the UPGRADE.txt
-instructions exactly (e.g. to continue it manually partway through).
 
 Support multiple versions of Drupal
 -----------------------------------
@@ -281,19 +259,11 @@ is substantially similar to the Drupal 7 upgrade process, so the Drupal 8
 upgrade support should be limited to providing an appropriate
 upgrade project map.)
 
-Set "Seven" as the Admin Theme
-------------------------------
-Cli option --seven to set the admin theme?  Code will already do this if "Seven"
-is your admin theme on D6.
-
 Upgrade Completion Report
 -------------------------
-We should cache all of the advice given by site-upgrade prior to the upgrade,
-plus all of the log messages from updatedb (except for the lines that say only
-"Performing xxxx_xxxx_####"), and then provide a separate command
-`drush @target upgrade-report` that will dump this info out, so that upgraders
-can review progress during and after the upgrade process.  We should save
-the progress file after every stage, not just on abort / error.
+The site-upgrade-progress report contains a lot of interesting information, but
+currently also displays a lot of not-very-interesting information.  The formatting
+is also in need of some work.  This report should be cleaned up a bit.
 
 Automatic detection of modified .htaccess / robots.txt
 ------------------------------------------------------
@@ -304,43 +274,29 @@ try to apply it on the upgraded system.  If the modifications consisted only
 of appended info to the end of the file, this might be reliable enough. (?)
 Need to test; I usually do not modify these files.
 
-Automatic Remediation of Status Report Problems
------------------------------------------------
-We could provide a separate command with a separate FSM state table to step
-through the entries from the `core-requirements` (`status-report`) report.
-Well-known problems (File System not writable, Rebuild Permissions, etc.)
-could be detected and the user could be prompted to choose the action to take.
 
-Note that sup already attempts to clean up prior to running the status
-report, to minimize the number of problems that might be reported.
+ISSUES WITH UPGRADE PATH
+========================
 
-Repair Toolbar Menu
--------------------
-See http://drupal.org/node/991778.  We could either have the user reset the
-"Administrator" menu item back to the Navigation menu, or delete the system
-menus per the workaround in the aforementioned issue (and clear the cache)
-after the upgrade completes.
+This section lists some issues from various issue queues on drupal.org that
+relate to potential problems with the upgrade path from Drupal 6 to Drupal 7.
+Check the issues themselves for updates or improved recommendations before
+following the instructions here.
 
+uuid module:
 
-EXAMPLE
-=======
+http://drupal.org/node/1469942:  Before upgrading, it is necessary to update to
+the 6.x-1.x-dev release of uuid until the 6.x-1.0-beta3 release goes out.
 
-Briefly:
+corrupted menus:
 
-drush @wk.dev sup @wk.d7dev # run through 'Update core', then cancel
-cd /home/ga/.drush/cache/@self-d6-to-wk.d7dev-d7/project_cache/
-patch -Np1 < ~/tmp/patches/uuid-update-install-uuid-fields-13.patch
-cdd @wk.d7dev
-patch -Np1 < ~/tmp/patches/drupal-7-cache-clear-all.patch
-drush @wk.dev sup @wk.d7dev --auto
-drush @wk.d7dev en seven
-drush @wk.d7dev vset admin_theme 'seven'
-cp -R /srv/www/dev.westkingdom.org/sites/all/themes/wk_zen2/css/wk_img/ /srv/www/d7.westkingdom.org/sites/default/files/
-drush @wk.d7dev en toolbar
-drush @wk.d7dev en shortcut
-drush @wk.d7dev en contextual
-drush @wk.d7dev sqlq "DELETE FROM drupal_menu_links WHERE module = 'system';"
-drush @wk.d7dev cc all
+http://drupal.org/node/991778: If menus are corrupted after an upgrade,
+try: DELETE FROM drupal_menu_links WHERE module = 'system';
+
+postgres:
+
+http://drupal.org/node/1031122 and http://drupal.org/node/1575790: In step 11,
+download and apply the patches in these two issues.
 
 
 CREDITS
