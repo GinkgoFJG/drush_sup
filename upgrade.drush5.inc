@@ -1315,7 +1315,7 @@ function drupal_site_upgrade_build_special_project_list(&$fsm_context) {
       if ($info['alternate-project'] != $info['alternate-module']) {
         $alternate_name .= ':' . $info['alternate-module'];
       }
-      $fsm_context['special_warning'][$original_project][$original_module] = dt("!project: The module !module in this project has no D!version version available, but there are multiple alternative projects that may be used instead. Drush picked !alternate, but !other also available.  Run again with --preferred to select a different preference.",
+      $fsm_context['special_warning'][$original_project][$original_module] = dt("The module !module in this project has no D!version version available, but there are multiple alternative projects that may be used instead. Drush picked !alternate, but !other also available.  Run again with --preferred to select a different preference.",
         array('!project' => $original_project, '!module' => $original_module, '!version' => $fsm_context['target_version'], '!alternate' => $alternate_name, '!other' => implode(',', $info['other-alternatives'])));
     }
   }
@@ -1400,12 +1400,13 @@ function drush_upgrade_check_modules_and_themes(&$fsm_context, $control) {
     drush_print_table($rows);
 
     if (!empty($in_core) || !empty($fsm_context['special_warning'])) {
-      drush_print(dt("Special notes about some of the projects you are using:"));
+      drush_print(dt("Special notes about some of the projects you are using:\n"));
     }
     // Print out some messages about projects that migrated  to core, or modules that will require special processing.
     if (!empty($in_core)) {
-      drush_log(dt('The following contrib modules were enabled in your Drupal site, but are now standard in core: !in_core.  These modules may need to be reconfigured after the upgrade is complete.', array('!in_core' => implode(', ', $in_core))), 'ok');
+      drush_print(dt("The following contrib modules were enabled in your Drupal site, but are now standard in core:\n\n    !in_core.\n\nThese modules may need to be reconfigured after the upgrade is complete.\n", array('!in_core' => implode(', ', $in_core))), 'ok');
     }
+    $rows = array();
     foreach ($fsm_context['special_warning'] as $project => $warnings) {
       foreach ($warnings as $module => $warning) {
         if ($warning === TRUE) {
@@ -1415,9 +1416,12 @@ function drush_upgrade_check_modules_and_themes(&$fsm_context, $control) {
           $warning = '!special  So far there is no indication of when a migration path will be provided.  Check !project_page for updates.';
           $ready_to_upgrade = 'maybe';
         }
-        $special = dt("!project: this project which requires data migration or other special processing.", array('!project' => $project));
-        drush_log(dt("$warning", array('!special' => $special, '!project' => $project, '!project_page' => 'http://drupal.org/project/' . $project, '!source' => $fsm_context['special_projects']['source'])), 'warning');
+        $special = dt("This project requires data migration or other special processing.");
+        $rows[] = array($project, ':', dt("$warning", array('!special' => $special, '!project' => $project, '!project_page' => 'http://drupal.org/project/' . $project, '!source' => $fsm_context['special_projects']['source'])));
       }
+    }
+    if (!empty($rows)) {
+      drush_print_table($rows);
     }
   }
   if (drush_upgrade_site_upgrade_check_parameters($fsm_context) === FALSE) {

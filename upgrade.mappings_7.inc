@@ -191,7 +191,7 @@ function drush_upgrade_mappings() {
       'taxonomy_delegate' => FALSE,
       'taxonomy_intro' => FALSE,
       'term_fields' => FALSE,
-      'uuid' => dt('IMPORTANT: Bug in uuid module:  Apply the patch at http://drupal.org/node/1469942 prior to enablind the uuid module to fix.  If you see error messages after updating uuid, you must restore to the latest working backup and then apply the aforementioned patch to the uuid module.'),
+      'uuid' => dt('IMPORTANT: Bug in uuid module:  Apply the patch at http://drupal.org/node/1469942, or upgrade to the dev version prior to enabling the uuid module to fix.  If you see error messages after updating uuid, you must restore to the latest working backup before proceeding.'),
     ),
   );
 
