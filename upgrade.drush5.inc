@@ -107,37 +107,70 @@ function drush_upgrade_site_upgrade_progress($fsm_context = NULL) {
   if (!is_array($fsm_context)) {
     $fsm_context = _drush_upgrade_load_fsm_context(drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT'));
   }
-  if (array_key_exists('stage', $fsm_context)) {
-    drush_print("The current stage is " . $fsm_context['stage']);
-    drush_print("The complete list of contrib extensions is: " . implode(',', $fsm_context['contrib_to_upgrade']));
-    drush_print("The following contrib extesnions have no available releases in the target version: " . implode(',', $fsm_context['unavailable_extensions']));
-    if (array_key_exists('module_to_upgrade', $fsm_context)) {
-      drush_print("The next module to upgrade is: " . $fsm_context['module_to_upgrade']);
+  $source_key = array_key_exists('source_key', $fsm_context) ? $fsm_context['source_key'] : '';
+  $target_key = $fsm_context['target_key'];
+  drush_print(dt("Upgrade status for: drush !source site-upgrade !target\n", array('!source' => $source_key, '!target' => $target_key)));
+  drush_log(dt("The target alias is: !alias", array('!alias' => var_export($fsm_context['target_alias'], TRUE))));
+  foreach ($fsm_context as $key => $value) {
+    if (!is_array($value)) {
+      if ($value === TRUE) {
+        $value = "true";
+      }
+      if ($value === FALSE) {
+        $value = "false";
+      }
+      drush_log(dt("!key: !value", array('!key' => $key, '!value' => $value)));
     }
+  }
+  if (array_key_exists('stage', $fsm_context)) {
+    if (array_key_exists('updatedb_messages', $fsm_context)) {
+      $completed_with_no_messages = array();
+      $completed_with_messages = array();
+      foreach ($fsm_context['updatedb_messages'] as $module => $info) {
+        if (empty($info)) {
+          $completed_with_no_messages[] = $module;
+        }
+        else {
+          $message = "";
+          foreach ($info as $update_hook => $messages) {
+            $message .= "$update_hook:\n\n" . implode("\n\n", $messages['status']) . "\n\n";
+          }
+          $completed_with_messages[$module] = rtrim($message);
+        }
+      }
+      if (!empty($completed_with_no_messages)) {
+        drush_print("The following extensions were successfully upgraded without any messages from updatedb:\n\n" . implode(',', $completed_with_no_messages) . "\n");
+      }
+      if (!empty($completed_with_messages)) {
+        drush_print(dt("The following extensions had messages from updatedb:\n"));
+        $rows = array();
+        foreach ($completed_with_messages as $module => $message) {
+          $rows[] = array($module, ':', $message);
+        }
+        drush_print_table($rows);
+      }
+    }
+    else {
+      drush_print("Drupal core has not been upgraded yet.\n");
+    }
+    drush_print(dt("The following contrib extesnions have no available releases in the target version: \n\n!list\n", array('!list' => implode(',', $fsm_context['unavailable_extensions']))));
+    //drush_print("The complete list of contrib extensions is: " . implode(',', $fsm_context['contrib_to_upgrade']));
     if (!empty($fsm_context['extensions_with_problems'])) {
       drush_print("The following contrib extesnions had problems: ");
+      $rows = array();
       foreach ($fsm_context['extensions_with_problems'] as $extension => $info) {
         $message = $info['message'];
-        drush_print("   $extension: $message");
+        $rows[] = array($extension, ':', $message);
       }
+      drush_print_table($rows);
     }
-    drush_print("The target alias is:");
-    drush_print_r($fsm_context['target_alias']);
-    drush_print("The project cache is at " . $fsm_context['project_cache']);
-    foreach ($fsm_context as $key => $value) {
-      if (!is_array($value)) {
-        if ($value === TRUE) {
-          $value = "true";
-        }
-        if ($value === FALSE) {
-          $value = "false";
-        }
-        drush_print("$key: $value");
-      }
+    $contrib_to_upgrade = array_diff($fsm_context['contrib_to_upgrade'], array_keys($fsm_context['updatedb_messages']));
+    if (!empty($contrib_to_upgrade)) {
+      drush_print(dt("The following contrib extesnions still need to be upgraded: \n\n!list\n", array('!list' => implode(',', $contrib_to_upgrade))));
     }
-    if (array_key_exists('updatedb_messages', $fsm_context)) {
-      drush_print("Status messages from updatedb:");
-      drush_print_r($fsm_context['updatedb_messages']);
+    drush_print("The current stage is " . $fsm_context['stage']);
+    if (array_key_exists('module_to_upgrade', $fsm_context)) {
+      drush_print("The next module to upgrade is: " . $fsm_context['module_to_upgrade']);
     }
   }
   else {
@@ -199,6 +232,11 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   $fsm_context['core-only'] = drush_get_option('core-only', FALSE);
   $source_record = drush_sitealias_get_record('@self');
   $fsm_context['source_name'] = (!empty($source_record) ? $source_record['#name'] . '-' : '') . 'd' . $fsm_context['source_version'];
+  $source_key = drush_get_context("DRUSH_TARGET_SITE_ALIAS");
+  if (empty($source_key)) {
+    $source_key = $source_record['#name'];
+  }
+  $fsm_context['source_key'] = $source_key;
   if (isset($target_key)) {
     $fsm_context['target_key'] = $target_key;
     $fsm_context['target_alias'] = drush_sitealias_get_record($target_key);
