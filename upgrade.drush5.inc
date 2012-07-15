@@ -40,6 +40,7 @@ function upgrade_drush_command() {
       'uninstall' => 'Comma-separated list of modules to uninstall in the target database prior to upgrade.  n.b. The source site is not affected.',
       'preferred' => 'Comma-separated list of alternative projects to prefer, when alternatives are available.',
     ),
+    'allow-additional-options' => array('sql-sync'),
     'aliases' => array('sup'),
     'topics' => array('docs-aliases'),
   );
@@ -1037,8 +1038,8 @@ function _drush_upgrade_site_copy_database_and_disable_contrib(&$fsm_context, $c
   // Empty or create the target database as needed.
   drush_sql_empty_db(drush_sitealias_get_db_spec($target_alias));
   // We still have DRUSH_AFFIRMATIVE set from above, so this will not prompt.
-  // TODO: redo this as drush_invoke_process
-  drush_invoke_process('@self', 'sql-sync', array('@self', $target_key), array('yes' => TRUE), array('integrate' => TRUE));
+  $command_options = drush_redispatch_get_options();
+  drush_invoke_process('@self', 'sql-sync', array('@self', $target_key), $command_options, array('integrate' => TRUE));
   if (drush_get_error()) return FALSE; // Early exit if we see an error.
   // When we first copy the database, its version will be the same as the source site.
   // We will advance its version by one after we run updatedb.
