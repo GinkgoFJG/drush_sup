@@ -203,8 +203,38 @@ settings, and insure that everything is correct. Some settings may be dropped
 during upgrade.  Fine-tuning of your theme may also be necessary.
 
 
-TODO
-====
+TODO PRIOR TO BETA RELEASE
+==========================
+
+Error checking on updatedb
+--------------------------
+If updatedb fails, the module is added to a "problems" list and
+processing on it is deferred until later.  If an error is reported
+in updatedb, though, it might corrupt the database; perhaps the
+site-upgrade command should recomment restoring from backup before
+continuing with other modules.  The user may already do this manually.
+
+Repeat display of Pre-upgrade Warning Messages
+-----------------------------------------------
+The 'post-processing needed' messages from the pre-upgrade report should be
+repeated again once the upgrade is finished.
+
+Improve 'no available releases' list in upgrade progress report
+---------------------------------------------------------------
+Currently, modules are included in the list of modules with no available
+releases even if site-upgrade has substituted another module for them
+(e.g. globalredirect => redirect).
+
+
+TODO AFTER BETA RELEASE (or maybe never)
+========================================
+
+Test if contrib modules need updatedb
+-------------------------------------
+It would be helpful if we could sort out which contrib modules
+have update functions that need to run, and which do not. An
+indication of which modules required no updates could be given
+on the module-selection menu.
 
 Tell Drush Where to get Module Files
 ------------------------------------
@@ -217,30 +247,6 @@ using any selection feature available in Drush make.
 There is an easy workaround for this as it is.  All of the modules
 are pre-downloaded to the project cache folder, so the user can
 just drop patches and custom versions there.
-
-Error checking on updatedb
---------------------------
-If updatedb fails, the module is added to a "problems" list and
-processing on it is deferred until later.  If an error is reported
-in updatedb, though, it might corrupt the database; perhaps the
-site-upgrade command should recomment restoring from backup before
-continuing with other modules.  The user may always do this manually, though.
-
-Refine Handling of Pre-upgrade Warning Messages
------------------------------------------------
-Right now, if there are warnings in the pre-upgrade messages, sup
-says "It is possible that the upgrade might fail".  Warning messages
-should be classified as 'post-processing needed', 'might fail',
-and so on, so this message is not displayed unless failure is actually
-possible.  The 'post-processing needed' messages should be repeated
-once the upgrade is finished.
-
-Test if contrib modules need updatedb
--------------------------------------
-It would be helpful if we could sort out which contrib modules
-have update functions that need to run, and which do not. An
-indication of which modules required no updates could be given
-on the module-selection menu.
 
 Simulated mode
 --------------
@@ -258,12 +264,6 @@ Drupal 8 upgrades. (Note: it looks like the UPGRADE.txt for Drupal 8
 is substantially similar to the Drupal 7 upgrade process, so the Drupal 8
 upgrade support should be limited to providing an appropriate
 upgrade project map.)
-
-Upgrade Completion Report
--------------------------
-The site-upgrade-progress report contains a lot of interesting information, but
-currently also displays a lot of not-very-interesting information.  The formatting
-is also in need of some work.  This report should be cleaned up a bit.
 
 Automatic detection of modified .htaccess / robots.txt
 ------------------------------------------------------
