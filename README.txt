@@ -225,6 +225,11 @@ Currently, modules are included in the list of modules with no available
 releases even if site-upgrade has substituted another module for them
 (e.g. globalredirect => redirect).
 
+Improve updatedb messages in upgrade progress report
+----------------------------------------------------
+'warning' and 'error' messages printed out during updatedb should be included
+in the upgrade progress report.
+
 
 TODO AFTER BETA RELEASE (or maybe never)
 ========================================

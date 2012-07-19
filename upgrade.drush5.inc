@@ -969,18 +969,18 @@ function _drush_site_upgrade_finish_up_contrib(&$fsm_context, $control) {
 }
 
 function _drush_site_upgrade_fix_permissions(&$fsm_context, $control) {
-  // The only thing we will do for now is make an attempt at making the 'files' directory writable
-  // to clear up one more potential problem with the status report.
+  // Make the 'files' directory writable to clear up one more potential problem
+  // with the status report.
   $result = drush_invoke_process($fsm_context['target_key'], "drupal-directory", array("%files"), array(), array('integrate' => FALSE));
   $files_dir = $result['object'];
-  chmod(dirname($files_dir), 0777);
-  chmod($files_dir, 0777);
-  // TODO: The status report still says:
-  // "The directory temp does not exist. You may need to
-  // set the correct directory at the file system
-  // settings page or change the current directory's
-  // permissions so that it is writable."
-  // Need to create the temp directory.
+  drush_op('chmod', dirname($files_dir), 0777);
+  drush_op('chmod', $files_dir, 0777);
+  // We will also create the temp directory and make it writable
+  $result = drush_invoke_process($fsm_context['target_key'], "drupal-directory", array("%temp"), array(), array('integrate' => FALSE));
+  $temp_dir = $result['object'];
+  drush_op('chmod', dirname($temp_dir), 0777);
+  drush_op('drush_mkdir', $temp_dir);
+  drush_op('chmod', $temp_dir, 0777);
   return TRUE;
 }
 

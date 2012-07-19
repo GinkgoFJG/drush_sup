@@ -493,6 +493,10 @@ function _drush_upgrade_stages($target_version) {
     'description' =>
       "
         C. Fix up some file system permissions.
+
+           Note: Drush site upgrade does not know what file system permissions
+           it should use; it just makes %files and %temp world-writable for
+           development.
       ",
     'callback' => '_drush_site_upgrade_fix_permissions',
   );
