@@ -1634,6 +1634,9 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
     $databases = $GLOBALS['databases'];
     $databases['default']['default']['database'] = $target_alias_databases['default']['default']['database'];
   }
+  // Update credentials
+  $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
+  $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
   $append .= "\n# New databases array:\n" . '$databases = ' . var_export($databases, TRUE) . ';';
   // Caching the database record in the alias record allows sql-sync to work
   // before updatedb is called. updatedb is what converts from a db_url to a
