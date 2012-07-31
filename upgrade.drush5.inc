@@ -1611,9 +1611,8 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
     $old_url = $old_url['default'];
   }
   $old_databases = empty($GLOBALS['databases']) ? drush_sitealias_convert_db_from_db_url($old_url) : $GLOBALS['databases'];
-
   $target_alias_databases = sitealias_get_databases_from_record($target_alias);
-  $database_name = $target_alias_databases['default']['default']['database'];
+  $database_name = isset($target_alias_databases) ? $target_alias_databases['default']['default']['database'] : '';
   if (empty($database_name)) {
     $database_name = preg_replace("/[^a-zA-Z0-9\s]/", "", $target_alias['#name']) . "db";
     drush_log(dt("No database name specified; defaulting to !dbname", array("!dbname" => $database_name)), 'notice');
@@ -1629,17 +1628,20 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
       $databases['default']['default']['prefix'] = $GLOBALS['db_prefix'];
     }
     // Update credentials
-    $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
-    $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
+    if (isset($$target_alias_databases)) {
+      $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
+      $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
+    }
     $new_url = drush_upgrade_database_record_to_db_url($databases['default']['default']);
     $append .= "\n# New db_url:\n\$db_url = '$new_url';";
   }
   else {
     $databases = $GLOBALS['databases'];
-    $databases['default']['default']['database'] = $target_alias_databases['default']['default']['database'];
-    // Update credentials
-    $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
-    $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
+    $databases['default']['default']['database'] = $database_name;
+    if (isset($$target_alias_databases)) {
+      $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
+      $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
+    }
   }
   $append .= "\n# New databases array:\n" . '$databases = ' . var_export($databases, TRUE) . ';';
   // Caching the database record in the alias record allows sql-sync to work
