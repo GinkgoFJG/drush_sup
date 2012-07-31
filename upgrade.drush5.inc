@@ -1621,22 +1621,26 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
 
   $append = "\n# Added by drush site-upgrade.";
   if (drush_drupal_major_version() <= 6) {
-    $new_url = substr($old_url, 0, strrpos(trim($old_url), '/')) . '/'. $database_name;
-    $append .= "\n# New db_url:\n\$db_url = '$new_url';";
-    $databases = drush_sitealias_convert_db_from_db_url($new_url);
+    $databases = drush_sitealias_convert_db_from_db_url($old_url);
+    $databases['default']['default']['database'] = $database_name;
     // Handle db prefix
     if (isset($GLOBALS['db_prefix'])) {
       $append .= "\n\$db_prefix = '" . $GLOBALS['db_prefix'] . "';";
       $databases['default']['default']['prefix'] = $GLOBALS['db_prefix'];
     }
+    // Update credentials
+    $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
+    $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
+    $new_url = drush_upgrade_database_record_to_db_url($databases['default']['default']);
+    $append .= "\n# New db_url:\n\$db_url = '$new_url';";
   }
   else {
     $databases = $GLOBALS['databases'];
     $databases['default']['default']['database'] = $target_alias_databases['default']['default']['database'];
+    // Update credentials
+    $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
+    $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
   }
-  // Update credentials
-  $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
-  $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
   $append .= "\n# New databases array:\n" . '$databases = ' . var_export($databases, TRUE) . ';';
   // Caching the database record in the alias record allows sql-sync to work
   // before updatedb is called. updatedb is what converts from a db_url to a
@@ -1645,4 +1649,16 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
 
   // Also append the new configuration options to the end of settings.php.
   return drush_op('file_put_contents', $settings_destination, $append, FILE_APPEND) !== FALSE;
+}
+
+function drush_upgrade_database_record_to_db_url($database_record) {
+  return $database_record['driver'] .
+    '://' .
+    $database_record['username'] .
+    ':' .
+    $database_record['password'] .
+    '@' .
+    $database_record['host'] .
+    '/' .
+    $database_record['database'];
 }
