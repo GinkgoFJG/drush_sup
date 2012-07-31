@@ -1037,8 +1037,15 @@ function _drush_upgrade_site_copy_database_and_disable_contrib(&$fsm_context, $c
   }
   // Empty or create the target database as needed.
   drush_sql_empty_db(drush_sitealias_get_db_spec($target_alias));
-  // We still have DRUSH_AFFIRMATIVE set from above, so this will not prompt.
-  $command_options = drush_redispatch_get_options();
+  // There are some options that would be destructive to pass through, so
+  // we need to be selective here
+  $command_options = array();
+  foreach (array('create-db', 'db-su', 'db-su-pw') as $option_name) {
+    $option_value = drush_get_option($option_name, NULL);
+    if (isset($option_value)) {
+      $command_options[$option_name] = $option_value;
+    }
+  }
   drush_invoke_process('@self', 'sql-sync', array('@self', $target_key), $command_options, array('integrate' => TRUE));
   if (drush_get_error()) return FALSE; // Early exit if we see an error.
   // When we first copy the database, its version will be the same as the source site.
@@ -1121,10 +1128,8 @@ function _drush_upgrade_site_create_transition_site(&$fsm_context, $control) {
     $fsm_context['modify_site_conf_path'] = dirname(conf_path()) . '/' . $fsm_context['modify_site']['uri'];
     $modify_site_settings = $fsm_context['modify_site_conf_path'] . '/settings.php';
     drush_log('Set up a transient site by copying ' . $fsm_context['settings_destination'] . ' to ' . $modify_site_settings, 'debug');
-    if (!file_exists($modify_site_settings)) {
-      if ((drush_mkdir($fsm_context['modify_site_conf_path'], TRUE) === FALSE) || drush_op('copy', $fsm_context['settings_destination'], $modify_site_settings) !== TRUE) {
-        return drush_set_error('DRUSH_UPGRADE_COULD_NOT_DISABLE', dt("Could not create a temporary multisite "));
-      }
+    if ((drush_mkdir($fsm_context['modify_site_conf_path'], TRUE) === FALSE) || drush_op('copy', $fsm_context['settings_destination'], $modify_site_settings) !== TRUE) {
+      return drush_set_error('DRUSH_UPGRADE_COULD_NOT_DISABLE', dt("Could not create a temporary multisite "));
     }
   }
   // Debugging:
@@ -1589,11 +1594,10 @@ function drush_upgrade_copy_settings(&$target_alias, $settings_destination) {
   }
 
   // Copy settings.php to target.
-  if (!file_exists($settings_destination)) {
-    if (!drush_op('copy', $settings_source, $settings_destination) && !drush_get_context('DRUSH_SIMULATE')) {
-      return drush_set_error('DRUSH_UPGRADE_COPY_FAILED', dt('Failed to copy @source to  @dest', array('@source' => $settings_source, 'dest' => $settings_destination)));
-    }
+  if (!drush_op('copy', $settings_source, $settings_destination) && !drush_get_context('DRUSH_SIMULATE')) {
+    return drush_set_error('DRUSH_UPGRADE_COPY_FAILED', dt('Failed to copy @source to  @dest', array('@source' => $settings_source, 'dest' => $settings_destination)));
   }
+
   // Append new $db_url with new DB name in target's settings.php.
   return drush_upgrade_fix_db_url($target_alias, $settings_destination);
 }
