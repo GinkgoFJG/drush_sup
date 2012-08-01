@@ -113,7 +113,7 @@ USAGE
     vary depending on how confident you are about the upgrade process.
     This can be controlled by the various prompting options:
 
-       --confirm-all
+       --prompt-all
 
        This option is best for your first run through Drush Site Upgrade.
        It will prompt at every stage.  Drush will tell you what it is
@@ -121,9 +121,9 @@ USAGE
        to do some investigation in another terminal; you can even opt to
        do the operation manually, and tell Drush to continue with the upgrade.
 
-       --confirm-all --skip-optional
+       --prompt-all --skip-optional
 
-       The --skip-optional flag is only valid in --confirm-all mode, as
+       The --skip-optional flag is only valid in --prompt-all mode, as
        skip optional is otherwise the default.  There are a number of steps
        in UPGRADE.txt that are only necessary when you are doing an upgrade
        in place.  For example, UPGRADE.txt instructs you to take the source
@@ -148,10 +148,17 @@ USAGE
        first (most reasonable) option at all stages, and will prompt you
        only in instances where there is no reasonable default.
 
+       --core-unmodified
+
+       Drush will stop and prompt you to re-apply modifications to .htaccess
+       and robots.txt, even in --auto mode, unless you also specify the
+       --core-unmodified option to skip this step.
+
+
  6. Run the Drush site-upgrade command with your selected target alias
     and prompting level:
 
-       $ drush @d6 site-upgrade --confirm-all @d7upgrade
+       $ drush @d6 site-upgrade --prompt-all @d7upgrade
 
  7. Step through the stages of the upgrade process, making note of any
     problems or error messages encountered along the way.  If you stop the
@@ -203,81 +210,16 @@ settings, and insure that everything is correct. Some settings may be dropped
 during upgrade.  Fine-tuning of your theme may also be necessary.
 
 
-TODO PRIOR TO BETA RELEASE
-==========================
+SUPPORT
+=======
 
-Error checking on updatedb
---------------------------
-If updatedb fails, the module is added to a "problems" list and
-processing on it is deferred until later.  If an error is reported
-in updatedb, though, it might corrupt the database; perhaps the
-site-upgrade command should recomment restoring from backup before
-continuing with other modules.  The user may already do this manually.
+Issues with Drush site-upgrade itself should be posted in the issue queue:
 
-Repeat display of Pre-upgrade Warning Messages
------------------------------------------------
-The 'post-processing needed' messages from the pre-upgrade report should be
-repeated again once the upgrade is finished.
+  http://drupal.org/project/issues/drush_sup
 
-Improve 'no available releases' list in upgrade progress report
----------------------------------------------------------------
-Currently, modules are included in the list of modules with no available
-releases even if site-upgrade has substituted another module for them
-(e.g. globalredirect => redirect).
-
-Improve updatedb messages in upgrade progress report
-----------------------------------------------------
-'warning' and 'error' messages printed out during updatedb should be included
-in the upgrade progress report.
-
-
-TODO AFTER BETA RELEASE (or maybe never)
-========================================
-
-Test if contrib modules need updatedb
--------------------------------------
-It would be helpful if we could sort out which contrib modules
-have update functions that need to run, and which do not. An
-indication of which modules required no updates could be given
-on the module-selection menu.
-
-Tell Drush Where to get Module Files
-------------------------------------
-It should be possible to tell Drush to get modules from some other
-source than pm-download, e.g. from a local git repository, from
-a cache folder, etc.  Maybe we should even allow the user to specify
-a makefile that will pull down specific versions of certain modules
-using any selection feature available in Drush make.
-
-There is an easy workaround for this as it is.  All of the modules
-are pre-downloaded to the project cache folder, so the user can
-just drop patches and custom versions there.
-
-Simulated mode
---------------
-We could add a "simulate" menu item to every stage with a callback.
-If selected, Drush could set SIMULATED, run the selected step, and
-then return to prompt the user again.  We could also support a
---simulate-first cli option that would automatically simulate every
-step before prompting the user.
-
-Support multiple versions of Drupal
------------------------------------
-Currently, only Drupal 6 to Drupal 7 upgrades are supported.  It
-would be possible to make a new FSM table to support Drupal 7 to
-Drupal 8 upgrades. (Note: it looks like the UPGRADE.txt for Drupal 8
-is substantially similar to the Drupal 7 upgrade process, so the Drupal 8
-upgrade support should be limited to providing an appropriate
-upgrade project map.)
-
-Automatic detection of modified .htaccess / robots.txt
-------------------------------------------------------
-If `hacked` is available, or if core was checked out via git from
-drupal.org, we could generate a patch file with local modifications
-to .htaccess and robots.txt.  Once we had a patch file, we could at least
-try to apply it on the upgraded system.  If the modifications consisted only
-of appended info to the end of the file, this might be reliable enough. (?)
-Need to test; I usually do not modify these files.
+If you are having problems related to error messages displayed when ENABLING
+or UPDATING a module (or UPDATING core), please direct your support request
+to the issue queue of the particular module that is failing.
 
 
 ISSUES WITH UPGRADE PATH
