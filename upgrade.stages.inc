@@ -275,6 +275,12 @@ function _drush_upgrade_stages($target_version) {
       "
         11. Re-apply any modifications to files such as .htaccess or robots.txt.
       ",
+    'options' => array(
+      'core-unmodified' => array(
+        'description' => 'Drupal core, including .htaccess and robots.txt, is unmodified; continue upgrading without checking.',
+        'next' => TRUE,
+      ),
+    ),
     'not-always-needed' => "If you had no modifications to .htaccess or robots.txt, you don't need to do anything here.",
   );
   $stages['UPGRADE.txt Major Upgrade Step 12'] = array(
@@ -355,6 +361,12 @@ function _drush_upgrade_stages($target_version) {
     'prepare' => '_drush_site_upgrade_reset_module_to_upgrade',
     'verify' => '_drush_site_upgrade_select_contrib_module_to_upgrade',
     'callback' => '_drush_site_upgrade_prepare_module_upgrade',
+    'options' => array(
+      'module-order' => array(
+        'description' => 'A list of modules to upgrade first.',
+        'list' => TRUE,
+      ),
+    ),
     'next' => array(
       '#progress' => 'Upgrade Progress',
       '#done' => 'Upgrading Contrib Modules from Drupal 6 to Drupal 7 Finish Up',
@@ -368,6 +380,12 @@ function _drush_upgrade_stages($target_version) {
     'prepare' => '_drush_site_upgrade_show_module_upgrade_txt',
     'no-op' => TRUE,
     'required' => TRUE,
+    'options' => array(
+      // If 'module-order' is set, then autoconfirm this step as well.
+      'module-order' => array(
+        'next' => TRUE,
+      ),
+    ),
     'next' => array(
       '#postpone' => 'UPGRADE.txt Major Upgrade Step 15',
     ),

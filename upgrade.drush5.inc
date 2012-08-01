@@ -22,12 +22,15 @@ function upgrade_drush_command() {
     ),
     'examples' => array(
       'drush site-upgrade @onward' => 'Upgrade from the current site to the site specified by @onward alias.',
+      'drush site-upgrade @onward --auto' => 'Skip most prompts, pausing only to allow core modifications (e.g. .htaccess and robots.txt) to be re-applied.',
+      'drush site-upgrade @onward --auto --core-unmodified' => 'Skip prompts, including the check for core modifications.',
+      'drush site-upgrade @onward --prompt-all' => 'Prompt about absolutely everything.',
     ),
     'options' => array(
-      'confirm-all' => 'Usually, Drush site-upgrade will run all of the straightforward steps automatically, and only prompts at "important" steps.  --confirm-all forces prompts at every step.',
-      'skip-optional' => 'Never prompt for optional steps; just skip them. This is the default; --skip-optional is only necessary with --confirm-all.',
+      'create-db' => 'Create the target database, or overwrite/empty it first if it already exists',
+      'prompt-all' => 'Usually, Drush site-upgrade will run all of the straightforward steps automatically, and only prompts at "important" steps.  --prompt-all forces prompts at every step.',
+      'skip-optional' => 'Never prompt for optional steps; just skip them. This is the default; --skip-optional is only necessary with --prompt-all.',
       'auto' => 'Automatically select the most reasonable choice at each prompt, when one is available.',
-      'structure-tables-key' => 'A key in the structure-tables array. @see example.drushrc.php. Defaults to \'common\'.',
       'source-dump' => 'Path to dump file. Medium or large sized sites should set this. Optional; default is to create a temporary file.',
       'db-su' => 'DB username to use when dropping and creating the target database. Optional.',
       'db-su-pw' => 'DB password to use when dropping and creating the target database. Optional.',
@@ -41,7 +44,6 @@ function upgrade_drush_command() {
       'preferred' => 'Comma-separated list of alternative projects to prefer, when alternatives are available.',
       'postpone' => 'Comma-separated list of modules to ignore during automatic upgrade but leave database records intact for later manual upgrade.',
     ),
-    'allow-additional-options' => array('sql-sync'),
     'aliases' => array('sup'),
     'topics' => array('docs-aliases'),
   );
@@ -68,6 +70,18 @@ function upgrade_drush_command() {
     'callback' => 'drush_print_file',
     'callback arguments' => array(dirname(__FILE__) . '/README.txt'),
   );
+  // Add options defined by the fsm to the help text.
+  $drupal_version = drush_drupal_major_version();
+  $stages = _drush_upgrade_site_upgrade_stages($drupal_version ? $drupal_version + 1 : 7);
+  foreach ($stages as $stage) {
+    if (array_key_exists('options', $stage)) {
+      foreach ($stage['options'] as $key => $option_info) {
+        if (array_key_exists('description', $option_info)) {
+          $items['site-upgrade']['options'][$key] = $option_info['description'];
+        }
+      }
+    }
+  }
   return $items;
 }
 
@@ -335,7 +349,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   // These flags always take on the value reflected by the cli options, regardless
   // of what might have been cached in the previous fsm context file.
   $fsm_context['auto'] = drush_get_option('auto', FALSE);
-  $fsm_context['straightforward'] = (!drush_get_option('confirm-all')) | $fsm_context['auto'];
+  $fsm_context['straightforward'] = (!drush_get_option('prompt-all')) | $fsm_context['auto'];
   $fsm_context['skip-optional'] = drush_get_option('skip-optional', $fsm_context['straightforward']);
 
   // Erase the 'download_attempts' variable on each run
@@ -453,6 +467,7 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
       'prepare' => NULL,
       'display' => NULL,
       'verify-message' => FALSE,
+      'options' => array(),
       'prompt' => 'What would you like to do?',
       'selection-options' => array(),
       'next' => array(),
@@ -559,8 +574,48 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
 
       // In auto mode, we will always select the first option for the user.
       if (!empty($control['selection-options'])) {
-        if ($auto) {
-          $control['selection'] = key($control['selection-options']);
+        $user_selection = FALSE;
+        foreach ($control['options'] as $option => $option_info) {
+          if ($option_info === TRUE) {
+            $option_info = array('list' => TRUE);
+          }
+          elseif (!is_array($option_info)) {
+            $option_info = array('next' => $option_info);
+          }
+          if (drush_get_option($option, FALSE)) {
+            if (array_key_exists('indirect', $option_info)) {
+              $user_selection = drush_get_option($option);
+            }
+            elseif (array_key_exists('list', $option_info)) {
+              $list = drush_get_option($option);
+              if (!is_array($list)) {
+                $list = explode(',', $list);
+              }
+              $list_item = array_shift($list);
+              if (array_key_exists($list_item, $control['selection-options'])) {
+                $user_selection = $list_item;
+                drush_set_option($option, $list);
+              }
+              else {
+                drush_log(dt('The item !item in !option is not an option; flag ignored', array('!item' => $list_item, '!option' => $option)), 'warning');
+                drush_unset_option($option);
+              }
+            }
+            elseif (array_key_exists('next', $option_info)) {
+              $user_selection = $option_info['next'];
+            }
+          }
+        }
+        if (is_string($user_selection) && !array_key_exists($user_selection, $control['selection-options'])) {
+          $user_selection = FALSE;
+        }
+        if ($auto || $user_selection) {
+          if (is_string($user_selection) && array_key_exists($user_selection, $control['selection-options'])) {
+            $control['selection'] = $user_selection;
+          }
+          else {
+            $control['selection'] = key($control['selection-options']);
+          }
           drush_print(dt("Drush will now do the step '!stage'.", array('!stage' => $control['selection-options'][$control['selection']])));
         }
         else {
@@ -1635,7 +1690,7 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
       $databases['default']['default']['prefix'] = $GLOBALS['db_prefix'];
     }
     // Update credentials
-    if (isset($$target_alias_databases)) {
+    if (isset($target_alias_databases)) {
       $databases['default']['default']['username'] = $target_alias_databases['default']['default']['username'];
       $databases['default']['default']['password'] = $target_alias_databases['default']['default']['password'];
     }
