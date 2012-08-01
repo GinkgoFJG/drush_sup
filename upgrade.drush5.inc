@@ -39,6 +39,7 @@ function upgrade_drush_command() {
       'reuse' => 'Reuse target if it already exists.  Default is to prompt.',
       'uninstall' => 'Comma-separated list of modules to uninstall in the target database prior to upgrade.  n.b. The source site is not affected.',
       'preferred' => 'Comma-separated list of alternative projects to prefer, when alternatives are available.',
+      'postpone' => 'Comma-separated list of modules to ignore during automatic upgrade but leave database records intact for later manual upgrade.',
     ),
     'allow-additional-options' => array('sql-sync'),
     'aliases' => array('sup'),
@@ -230,6 +231,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
   $fsm_context['target_version'] = $fsm_context['source_version'] + 1;
   $fsm_context['fsm_context_cache_file'] = FALSE;
   $fsm_context['uninstall_extensions'] = drush_get_option('uninstall', '');
+  $fsm_context['postpone_extensions'] = drush_get_option('postpone', '');
   $fsm_context['core-only'] = drush_get_option('core-only', FALSE);
   $source_record = drush_sitealias_get_record('@self');
   $fsm_context['source_name'] = (!empty($source_record) ? $source_record['#name'] . '-' : '') . 'd' . $fsm_context['source_version'];
@@ -347,6 +349,11 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
     'target_database_version' => 0, // No database exists -- until we copy it. Then we will set this to source_version. After updatedb, we set it to target_version.
     'extensions_with_problems' => array(),
   );
+  foreach(explode(',',$fsm_context['postpone_extensions']) as $extension) {
+    if (!array_key_exists($extension, $fsm_context['extensions_with_problems'])) {
+      $fsm_context['extensions_with_problems'][$extension]['message'] = dt("Manually postponed.");
+    }
+  }
 
   // Collect information about the system before we begin.
   drush_upgrade_gather_information($fsm_context);
@@ -1634,6 +1641,10 @@ function drush_upgrade_fix_db_url(&$target_alias, $settings_destination) {
     }
     $new_url = drush_upgrade_database_record_to_db_url($databases['default']['default']);
     $append .= "\n# New db_url:\n\$db_url = '$new_url';";
+    // The mysqli driver is no longer supported in Drupal 7 and later.  See http://drupal.org/node/475138
+    if ($databases['default']['default']['driver'] == 'mysqli') {
+      $databases['default']['default']['driver'] = 'mysql';
+    }
   }
   else {
     $databases = $GLOBALS['databases'];
