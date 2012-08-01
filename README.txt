@@ -88,8 +88,8 @@ USAGE
     the upgrade; if so, you will be advised of what needs to be done.
     For example, if you are using features, you should import all of your
     features into the database using the `drush features-import-all`
-    command.  Instructions on doing this is given in the upgrade readiness
-    report.
+    command.  This command is under development in the features issue queue;
+    see http://drupal.org/node/1014522#comment-5478110 for details.
 
     You may decide at this point that you cannot upgrade your site, because
     needed modules or themes are not ready for Drupal 7.  If you would
