@@ -720,9 +720,14 @@ function _drush_upgrade_site_already_offline(&$fsm_context, $control) {
 }
 
 function _drush_upgrade_site_already_online(&$fsm_context, $control) {
-  $result = drush_invoke_process('@self', 'variable-get', array('maintenance_mode'), array(), array('integrate' => FALSE));
+  $result = drush_invoke_process($fsm_context['target_key'], 'variable-get', array('maintenance_mode'), array(), array('integrate' => FALSE));
   $site_offline = is_array($result['object']) ? array_values($result['object']) : array();
   return (count($site_offline) == 0) || ($site_offline[0] == 0);
+}
+
+function _drush_upgrade_update_free_access_already_false(&$fsm_context, $control) {
+  $result = drush_invoke_process($fsm_context['target_key'], 'php-eval', array('var_export($GLOBALS["update_free_access"]);'), array(), array('integrate' => FALSE));
+  return $result['output'] == 'false';
 }
 
 function _drush_upgrade_site_already_latest_version_drupal(&$fsm_context, $control) {

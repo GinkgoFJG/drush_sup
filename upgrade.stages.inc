@@ -542,6 +542,7 @@ function _drush_upgrade_stages($target_version) {
       "
         D. Run cron, for good measure.
       ",
+    'straightforward' => TRUE,
     'callback' => '_drush_site_upgrade_run_cron',
   );
   $stages['UPGRADE.txt Major Upgrade Step 16'] = array(
@@ -551,6 +552,7 @@ function _drush_upgrade_stages($target_version) {
             working as expected.
       ",
     'note' => 'Drush can also show you this information in the console via the `drush status-report` command.',
+    'straightforward' => TRUE,
     'drush-command' => 'status-report',
     'drush-site' => '@upgrade-target',
   );
@@ -560,6 +562,8 @@ function _drush_upgrade_stages($target_version) {
         17. Ensure that \$update_free_access is FALSE in settings.php.
       ",
     'straightforward' => TRUE,
+    'verify' => '_drush_upgrade_update_free_access_already_false',
+    'verify-message' => '$update_free_access is already FALSE in settings.php.',
   );
   $stages['UPGRADE.txt Major Upgrade Step 18'] = array(
     'description' =>
@@ -569,6 +573,11 @@ function _drush_upgrade_stages($target_version) {
            configuration.
       ",
     'straightforward' => TRUE,
+    'verify' => '_drush_upgrade_site_already_online',
+    'verify-message' => 'The source site is already online.',
+    'drush-command' => 'variable-set',
+    'drush-arguments' => array('maintenance_mode', '0'),
+    'drush-options' => array('always-set' => TRUE),
   );
   $stages['Upgrade Complete'] = array(
     'description' =>
