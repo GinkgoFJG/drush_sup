@@ -1111,7 +1111,7 @@ function _drush_upgrade_site_copy_database_and_disable_contrib(&$fsm_context, $c
   drush_sql_empty_db(drush_sitealias_get_db_spec($target_alias));
   // There are some options that would be destructive to pass through, so
   // we need to be selective here
-  $command_options = array();
+  $command_options = array('yes' => TRUE);
   foreach (array('create-db', 'db-su', 'db-su-pw') as $option_name) {
     $option_value = drush_get_option($option_name, NULL);
     if (isset($option_value)) {
