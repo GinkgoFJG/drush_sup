@@ -1022,8 +1022,36 @@ function _drush_site_upgrade_enable_specified_module(&$fsm_context, &$control, $
   return TRUE;
 }
 
+/**
+ * TO DO: Remove once http://drupal.org/node/1698088 is committed.
+ */
+function _drush_site_upgrade_content_migrate_strip_html(&$item, $key) {
+  $item = trim(drush_html_to_text($item));
+}
+
+/**
+ * TO DO: Remove once http://drupal.org/node/1698088 is committed.
+ */
+function drush_site_upgrade_content_migrate_status() {
+  module_load_include('inc', 'content_migrate', 'includes/content_migrate.admin');
+  $fields_info = content_migrate_get_options();
+
+  $rows = array();
+  $rows[] = array(t('Status'), t('Field'), t('Field type'), t('Content type(s)'), t('Other information'));
+  foreach ($fields_info as $status => $fields) {
+    foreach ($fields as $field_name => $field) {
+      array_walk($field, '_drush_site_upgrade_content_migrate_strip_html');
+      array_unshift($field, t(ucfirst($status)));
+      $rows[] = $field;
+    }
+  }
+  drush_print_table($rows, TRUE);
+}
+
 function _drush_site_upgrade_show_migrations(&$fsm_context, &$control) {
-  $result = drush_invoke_process($fsm_context['target_key'], 'content-migrate-status', array(), array(), array('integrate' => TRUE));
+  // TO DO: Go back to 'content-migrate-status' once http://drupal.org/node/1698088 is committed.
+  $result = drush_invoke_process($fsm_context['target_key'], 'php-eval', array('drush_site_upgrade_content_migrate_status();'), array(), array('integrate' => TRUE));
+  // $result = drush_invoke_process($fsm_context['target_key'], 'content-migrate-status', array(), array(), array('integrate' => TRUE));
   return TRUE;
 }
 
