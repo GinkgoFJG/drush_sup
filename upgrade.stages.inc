@@ -445,7 +445,7 @@ function _drush_upgrade_stages($target_version) {
   $stages['Upgrade Progress'] = array(
     'description' =>
       "
-          [ Sorry for the messy output!  This will be improved in the future. ]
+          Current upgrade progress:
       ",
     'display' => 'drush_upgrade_site_upgrade_progress',
     'no-op' => TRUE,
@@ -505,7 +505,26 @@ function _drush_upgrade_stages($target_version) {
       "
         B. Enable the core module content_migrate.
       ",
+    'selection-options' => array(
+      '_run' => 'Enable content migrate and show available migrations.',
+      '#skip' => 'Do not enable the content migrate module.',
+    ),
     'callback' => '_drush_site_upgrade_enable_content_migrate',
+    'next' => array(
+      '#skip' => 'Post-upgrade Step C',
+    ),
+  );
+  $stages['Post-upgrade Step B.2'] = array(
+    'description' =>
+      "
+        B.2. Migrate fields.
+      ",
+    'display' => '_drush_site_upgrade_show_migrations',
+    'selection-options' => array(
+      '_run' => 'Run all available migrations.',
+      '#skip' => 'Do not migrate fields.',
+    ),
+    'callback' => '_drush_site_upgrade_migrate_fields',
   );
   $stages['Post-upgrade Step C'] = array(
     'description' =>
@@ -562,9 +581,6 @@ function _drush_upgrade_stages($target_version) {
              *  Upgrade your theme, or create a new one, perhaps using
                 either zen or omega (both of which contain Drush commands
                 to create a new theme template)
-
-             *  Use the content migrate module to convert your cck-based content
-                for Drupal 7, as described in http://drupal.org/node/781088
 
              *  Consider using Drupal-to-Drupal migration to keep the content
                 on your new site in sync with additions and changes made on

@@ -308,7 +308,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
 
         $selection = drush_choice($options, dt("A Drupal site exists at the destination. What would you like to do?"));
         // Selected a backup item?
-        if (array_key_exists($selection, $backups)) {
+        if (is_string($selection) && array_key_exists($selection, $backups)) {
           $archive = $backups[$selection]['archive'];
           $fsm_context = $backups[$selection]['context'];
           $stage = $fsm_context['stage'];
@@ -364,7 +364,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
     'extensions_with_problems' => array(),
   );
   foreach(explode(',',$fsm_context['postpone_extensions']) as $extension) {
-    if (!array_key_exists($extension, $fsm_context['extensions_with_problems'])) {
+    if (!empty($extension) && !array_key_exists($extension, $fsm_context['extensions_with_problems'])) {
       $fsm_context['extensions_with_problems'][$extension]['message'] = dt("Manually postponed.");
     }
   }
@@ -1019,6 +1019,16 @@ function _drush_site_upgrade_enable_specified_module(&$fsm_context, &$control, $
     $fsm_context['extensions_with_problems'][$specified_module] = array('message' => dt("Error: failed to enable."));
     return FALSE;
   }
+  return TRUE;
+}
+
+function _drush_site_upgrade_show_migrations(&$fsm_context, &$control) {
+  $result = drush_invoke_process($fsm_context['target_key'], 'content-migrate-status', array(), array(), array('integrate' => TRUE));
+  return TRUE;
+}
+
+function _drush_site_upgrade_migrate_fields(&$fsm_context, &$control) {
+  $result = drush_invoke_process($fsm_context['target_key'], 'content-migrate-fields', array(), array(), array('integrate' => TRUE));
   return TRUE;
 }
 
