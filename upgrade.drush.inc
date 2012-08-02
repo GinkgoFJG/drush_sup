@@ -229,6 +229,13 @@ function _drush_upgrade_load_fsm_context($destination_core) {
   return $fsm_context;
 }
 
+function drush_upgrade_site_upgrade_validate($target_key = NULL, $initial_stage = NULL) {
+  if (DRUSH_MAJOR_VERSION < 4) {
+    return drush_set_error('DRUSH_SITE_UPGRADE_REQUIRED_VERSION', dt("The site-upgrade command requires Drush version 5 or later."));
+  }
+  return TRUE;
+}
+
 /**
  * Main command hook for site-upgrade.
  *

@@ -29,11 +29,15 @@ REQUIREMENTS
 INSTALLATION
 ============
 
-Follow the git instructions at http://drupal.org/node/1408380/git-instructions/master
-to download the latest version of the Drush site-upgrade command.  See the Drush
-README.txt for locations where Drush extensions may be placed.
+If you have not already done so, install Drush as described on the Drush
+project page: http://drupal.org/project/drush
 
-FURURE: `drush dl drush_sup` will be sufficient once there is a drush_sup release.
+To install Drush site-upgrade, simply run:
+
+  drush dl drush_sup
+
+This will put the site-upgrade Drush extension in the correct place for
+Drush to recognize it.
 
 
 USAGE
