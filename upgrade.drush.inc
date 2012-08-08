@@ -155,7 +155,7 @@ function drush_upgrade_site_upgrade_progress($fsm_context = NULL) {
         }
       }
       if (!empty($completed_with_no_messages)) {
-        drush_print("The following extensions were successfully upgraded without any messages from updatedb:\n\n" . implode(',', $completed_with_no_messages) . "\n");
+        _drush_upgrade_site_show_message_with_data_table(dt("The following extensions were successfully upgraded without any messages from updatedb:"), $completed_with_no_messages);
       }
       if (!empty($completed_with_messages)) {
         drush_print(dt("The following extensions had messages from updatedb:\n"));
@@ -169,7 +169,7 @@ function drush_upgrade_site_upgrade_progress($fsm_context = NULL) {
     else {
       drush_print("Drupal core has not been upgraded yet.\n");
     }
-    drush_print(dt("The following contrib extesnions have no available releases in the target version: \n\n!list\n", array('!list' => implode(',', $fsm_context['unavailable_extensions']))));
+    _drush_upgrade_site_show_message_with_data_table(dt("The following contrib extesnions have no available releases in the target version:"), $fsm_context['unavailable_extensions']);
     //drush_print("The complete list of contrib extensions is: " . implode(',', $fsm_context['contrib_to_upgrade']));
     if (!empty($fsm_context['extensions_with_problems'])) {
       drush_print("The following contrib extesnions had problems: ");
@@ -182,7 +182,7 @@ function drush_upgrade_site_upgrade_progress($fsm_context = NULL) {
     }
     $contrib_to_upgrade = array_diff($fsm_context['contrib_to_upgrade'], array_keys($fsm_context['updatedb_messages']));
     if (!empty($contrib_to_upgrade)) {
-      drush_print(dt("The following contrib extesnions still need to be upgraded: \n\n!list\n", array('!list' => implode(',', $contrib_to_upgrade))));
+      _drush_upgrade_site_show_message_with_data_table(dt("The following contrib extesnions still need to be upgraded:"), $contrib_to_upgrade);
     }
     drush_print("The current stage is " . $fsm_context['stage']);
     if (array_key_exists('module_to_upgrade', $fsm_context)) {
@@ -192,6 +192,34 @@ function drush_upgrade_site_upgrade_progress($fsm_context = NULL) {
   else {
     return drush_set_error('DRUSH_NO_UPGRADE_IN_PROGRESS', dt("There is no site upgrade in progress on the target site."));
   }
+}
+
+function _drush_upgrade_site_show_message_with_data_table($message, $data, $columns = 3) {
+  sort($data);
+  drush_print($message . "\n");
+  $rows = _drush_upgrade_site_arrange_in_columns($data, $columns);
+  drush_print_table($rows);
+}
+
+function _drush_upgrade_site_arrange_in_columns($data, $columns = 3) {
+  $empty_row = array_fill(0, $columns, '');
+  $rows = array();
+  $max_row = (count($data) + ($columns - 1)) / $columns;
+
+  $row = 0;
+  $col = 0;
+  foreach($data as $item) {
+    if (!array_key_exists($row, $rows)) {
+      $rows[$row] = $empty_row;
+    }
+    $rows[$row][$col] = $item;
+    ++$row;
+    if ($row >= $max_row) {
+      ++$col;
+      $row = 0;
+    }
+  }
+  return $rows;
 }
 
 /**
