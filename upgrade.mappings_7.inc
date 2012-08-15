@@ -33,51 +33,57 @@ function drush_upgrade_mappings() {
   // desired upgrade path if this is the case.
   //
   $project_alternatives = array(
-     'redirect' => array(
-       'description' => 'The redirect project provides replacement functionality for the globalredirect and path_redirect projects.',
-       'module-remap' => array(
-         'globalredirect' => 'redirect',
-         'path_redirect' => 'redirect',
-       ),
-     ),
-     'bundle_copy' => array(
-       'description' => 'The cck copy_content module was moved out into the bundle_copy module in D7.',
-       'module-remap' => array(
-         'content_copy' => 'bundle_copy',
-       ),
-     ),
-     'field_permissions' => array(
-       'description' => 'The cck content_permissions module moved to the field_permissions module in D7.',
-       'module-remap' => array(
-         'content_permissions' => 'field_permissions',
-       ),
-     ),
-     'field_group' => array(
-       'description' => 'The cck field_group module moved to the field_group module in D7.',
-       'module-remap' => array(
-         'fieldgroup' => 'field_group',
-       ),
-     ),
-     'ctools' => array(
-       'description' => 'The functionality of the views module views_export can now be handled by the ctools bulk export module.',
-       'module-remap' => array(
-         'views_export' => 'bulk_export',
-       ),
-     ),
-     'references' => array(
-       'description' => 'The cck node_reference and user_reference modules may be replaced by the references project in D7.',
-       'module-remap' => array(
-         'nodereference' => 'node_reference',
-         'userreference' => 'user_reference',
-       ),
-     ),
-     'entityreference' => array(
-       'description' => 'The cck node_reference and user_reference modules may be replaced by the entityreference module in D7.',
-       'module-remap' => array(
-         'nodereference' => 'entityreference',
-         'userreference' => 'entityreference',
-       ),
-     ),
+    'redirect' => array(
+      'description' => 'The redirect project provides replacement functionality for the globalredirect and path_redirect projects.',
+      'module-remap' => array(
+        'globalredirect' => 'redirect',
+        'path_redirect' => 'redirect',
+      ),
+    ),
+    'bundle_copy' => array(
+      'description' => 'The cck copy_content module was moved out into the bundle_copy module in D7.',
+      'module-remap' => array(
+        'content_copy' => 'bundle_copy',
+      ),
+    ),
+    'field_permissions' => array(
+      'description' => 'The cck content_permissions module moved to the field_permissions module in D7.',
+      'module-remap' => array(
+        'content_permissions' => 'field_permissions',
+      ),
+    ),
+    'field_group' => array(
+      'description' => 'The cck field_group module moved to the field_group module in D7.',
+      'module-remap' => array(
+        'fieldgroup' => 'field_group',
+      ),
+    ),
+    'ctools' => array(
+      'description' => 'The functionality of the views module views_export can now be handled by the ctools bulk export module.',
+      'module-remap' => array(
+        'views_export' => 'bulk_export',
+      ),
+    ),
+    'references' => array(
+      'description' => 'The cck node_reference and user_reference modules may be replaced by the references project in D7.',
+      'module-remap' => array(
+        'nodereference' => 'node_reference',
+        'userreference' => 'user_reference',
+      ),
+    ),
+    'entityreference' => array(
+      'description' => 'The cck node_reference and user_reference modules may be replaced by the entityreference module in D7.',
+      'module-remap' => array(
+        'nodereference' => 'entityreference',
+        'userreference' => 'entityreference',
+      ),
+    ),
+    'calendar_ical' => array(
+      'description' => 'calendar_ical has been replaced by date_ical in D7.',
+      'module-remap' => array(
+        'calendar_ical' => 'date_ical'
+      ),
+    ),
   );
   //
   // Projects in core lists Drupal 6 contrib projects
