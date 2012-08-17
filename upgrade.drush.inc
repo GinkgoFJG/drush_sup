@@ -322,6 +322,9 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
     $fsm_context['target_alias'] = drush_sitealias_get_record($target_key);
     if (!empty($fsm_context['target_alias'])) {
       $fsm_context['destination_core'] = $fsm_context['target_alias']['root'];
+      if (!is_writable(dirname($fsm_context['destination_core']))) {
+        return drush_set_error('DRUSH_SITE_UPGRADE_NOT_WRITABLE', dt("The parent of the target site root, !dir, must be writable, and is not.", array('!dir' => dirname($fsm_context['destination_core']))));
+      }
       $fsm_context['target_name'] = (!empty($fsm_context['target_alias']) ? $fsm_context['target_alias']['#name'] . '-' : '') . 'd' . $fsm_context['target_version'];
       $fsm_context['work_name'] = $fsm_context['source_name'] . '-to-' . $fsm_context['target_name'];
       $fsm_context['work_dir'] = drush_directory_cache($fsm_context['work_name']);
