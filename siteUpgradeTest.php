@@ -1,7 +1,6 @@
 <?php
 
 /**
- /*
  * @file
  *   PHPUnit Tests for site-upgrade. This uses Drush's test framework, based on PHPUnit.
  *   To run the tests, use phpunit --bootstrap=/path/to/drush/tests/drush_testcase.inc.
@@ -52,6 +51,7 @@ class siteUpgradeCase extends Drush_CommandTestCase {
     // Perform the upgrade.
     $options = array(
       'yes' => NULL,
+      'auto' => NULL,
       'root' => $root,
       'uri' => key($sites),
     );
