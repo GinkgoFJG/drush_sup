@@ -84,6 +84,12 @@ function drush_upgrade_mappings() {
         'calendar_ical' => 'date_ical'
       ),
     ),
+    'subpath_alias' => array(
+      'description' => 'subpath_alias has been replaced by subpathauto in D7.',
+      'module-remap' => array(
+        'subpath_alias' => 'subpathauto'
+      ),
+    ),
   );
   //
   // Projects in core lists Drupal 6 contrib projects
