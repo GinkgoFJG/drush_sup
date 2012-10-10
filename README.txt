@@ -32,12 +32,24 @@ INSTALLATION
 If you have not already done so, install Drush as described on the Drush
 project page: http://drupal.org/project/drush
 
-To install Drush site-upgrade, simply run:
+To install Drush site-upgrade, simply change to your home directory and run:
 
-  drush dl drush_sup
+  $ drush dl drush_sup
 
 This will put the site-upgrade Drush extension in the correct place for
 Drush to recognize it.
+
+        NOTE: It is recommended that download drush_sup from your home
+        directory in order to allow Drush to select the correct default
+        version for drush_sup. If your current working directory is inside
+        of a Drupal 6.x site, Drush will attempt to download drush_sup-6.x,
+        which does not exist and will therefore fail.  As an alternative,
+        you could specifically request the 7.x branch via:
+
+          $ drush dl drush_sup-7.x
+
+        This will download the latest recommended version on the correct
+        (7.x) branch and place it the correct location.
 
 
 USAGE
