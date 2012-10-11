@@ -46,10 +46,10 @@ Drush to recognize it.
         which does not exist and will therefore fail.  As an alternative,
         you could specifically request the 7.x branch via:
 
-          $ drush dl drush_sup-7.x
+          $ drush dl drush_sup-7.x-2.x --select
 
-        This will download the latest recommended version on the correct
-        (7.x) branch and place it the correct location.
+        You may then select the dev version or the most recent stable
+        release.
 
 
 USAGE
