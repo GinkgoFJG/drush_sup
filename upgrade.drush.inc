@@ -1569,7 +1569,7 @@ function drush_upgrade_check_modules_and_themes(&$fsm_context, $control) {
         }
         $remapped_project_download_list[] = $project_to_download;
       }
-      $result = drush_invoke_process('@none', 'pm-releases', $remapped_project_download_list, array('default-major' => $target_version), array('integrate' => FALSE, 'override-simulated' => TRUE, 'log' => FALSE));
+      $result = drush_invoke_process('@none', 'pm-releases', $remapped_project_download_list, array('default-major' => $target_version, 'strict' => 0), array('integrate' => FALSE, 'override-simulated' => TRUE, 'log' => FALSE));
       $project_releases = $result['object'];
       if (!is_array($project_releases)) {
         return drush_set_error('DRUSH_SITE_UPGRADE_NO_RELEASE_INFO', dt("Could not get release information via drush pm-releases."));
