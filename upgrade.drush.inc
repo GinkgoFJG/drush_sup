@@ -1234,8 +1234,11 @@ function _drush_upgrade_site_copy_database_and_disable_contrib(&$fsm_context, $c
     if (!_drush_upgrade_site_create_transition_site($fsm_context, $control)) {
       return FALSE;
     }
-    $result = (drush_invoke_process($fsm_context['modify_site'], 'site-upgrade-prepare', $fsm_context['contrib_extensions'], array('uninstall' => implode(',', $fsm_context['uninstall_extensions']), 'yes' => TRUE), array('interactive' => TRUE)) == 0);
-    if ($result === FALSE) return FALSE;
+
+    $drush_process = drush_invoke_process($fsm_context['modify_site'], 'site-upgrade-prepare', $fsm_context['contrib_extensions'], array('uninstall' => implode(',', $fsm_context['uninstall_extensions']), 'yes' => TRUE), array('interactive' => TRUE));
+    if ($drush_process === FALSE || $drush_process['error_status'] !== 0) {
+      return FALSE;
+    }
   }
 
   return TRUE;
