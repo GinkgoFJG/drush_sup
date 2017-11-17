@@ -798,8 +798,16 @@ function _drush_upgrade_update_free_access_already_false(&$fsm_context, $control
 
 function _drush_upgrade_site_already_latest_version_drupal(&$fsm_context, $control) {
   $result = drush_invoke_process('@self', 'pm-releases', array('drupal'), array(), array('integrate' => FALSE));
-  $installed = $result['object']['drupal']['installed'];
   $latest = array_shift(array_keys($result['object']['drupal']['releases']));
+
+  $installed = $result['object']['drupal']['installed'];
+  // The above method for doesn't seem to return the installed version for drush
+  // 7, so we fall back to the below if needed.
+  if (!$installed) {
+    $status = drush_invoke_process('@self', 'core-status', array(), array('fields' => 'drupal-version'), array('integrate' => FALSE));
+    $installed = $status['object']['drupal-version'];
+  }
+
   drush_print();
   if ($installed == $latest) {
     drush_print(dt("Drupal core is up-to-date; version !installed installed.", array('!installed' => $installed)));
