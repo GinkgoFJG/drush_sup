@@ -1207,7 +1207,14 @@ function _drush_upgrade_site_copy_database_and_disable_contrib(&$fsm_context, $c
     drush_set_option('structure-tables-key', 'common');
   }
   // Empty or create the target database as needed.
-  drush_sql_empty_db(drush_sitealias_get_db_spec($target_alias));
+  if (function_exists('drush_sql_empty_db')) {
+    drush_sql_empty_db(drush_sitealias_get_db_spec($target_alias));
+  }
+  else {
+    $db_spec = drush_sitealias_get_db_spec($target_alias);
+    $sql = drush_sql_get_class($db_spec);
+    $sql->drop_or_create();
+  }
   // There are some options that would be destructive to pass through, so
   // we need to be selective here
   $command_options = array('yes' => TRUE);
