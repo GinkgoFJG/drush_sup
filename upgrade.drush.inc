@@ -806,7 +806,8 @@ function _drush_upgrade_site_already_latest_version_drupal(&$fsm_context, $contr
   }
   else {
     drush_print("\nFJG: " . __FUNCTION__ . '::' . __LINE__ . "\n");
-    var_dump($result);
+    $test = drush_invoke_process('@self', 'core-status', array(), array('fields' => 'drupal-version'), array('integrate' => FALSE));
+    var_dump($test);
     drush_print(dt("Drupal core is out of date; version !installed installed, latest verison is !latest.", array('!installed' => $installed, '!latest' => $latest)));
   }
   // TODO:  We should call `pm-updatecode --no` and see if it returns any out-of-date modules.
@@ -1349,6 +1350,8 @@ function _drush_upgrade_site_updatedb(&$fsm_context, $control) {
   $fsm_context['updatedb_messages'][$module_to_upgrade] = $updatedb_status;
   // Return an error on failure
   if ($values['error_status'] && count(_drush_upgrade_get_nontrivial_upgrade_errors($values['error_log']))) {
+    drush_print("\nFJG: " . __FUNCTION__ . '::' . __LINE__ . "\n");
+    var_dump(_drush_upgrade_get_nontrivial_upgrade_errors($values['error_log']));
     return drush_set_error('DRUSH_UPGRADE_UPDATEDB_FAILED', dt("updatedb failed for !module_to_upgrade", array('!module_to_upgrade' => $module_to_upgrade)));
   }
   // After updatedb runs successfuly, set the target database version
