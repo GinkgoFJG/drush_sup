@@ -1348,9 +1348,7 @@ function _drush_upgrade_site_updatedb(&$fsm_context, $control) {
   }
   $fsm_context['updatedb_messages'][$module_to_upgrade] = $updatedb_status;
   // Return an error on failure
-  drush_print("\nFJG: " . __FUNCTION__ . '::' . __LINE__ . "\n");
-  var_dump($values);
-  if ($values['error_status']) {
+  if ($values['error_status'] && count(_drush_upgrade_get_nontrivial_upgrade_errors($values['error_log']))) {
     return drush_set_error('DRUSH_UPGRADE_UPDATEDB_FAILED', dt("updatedb failed for !module_to_upgrade", array('!module_to_upgrade' => $module_to_upgrade)));
   }
   // After updatedb runs successfuly, set the target database version
@@ -1864,4 +1862,26 @@ function drush_upgrade_database_record_to_db_url($database_record) {
     $database_record['host'] .
     '/' .
     $database_record['database'];
+}
+
+/**
+ * Takes an error_log from drush_backend_get_result(). Filters out errors that
+ * shouldn't be showstoppers for proceeding with an upgrade.
+ *
+ * @param array $error_log
+ */
+function _drush_upgrade_get_nontrivial_upgrade_errors(array $error_log) {
+  foreach ($error_log as $error_code => $errors) {
+    $nontrivial_errors = array_filter($errors, function($msg) {
+      return strpos($msg, 'The following module is missing from the file system:') !== 0;
+    });
+    if (count($nontrivial_errors)) {
+      $error_log[$error_code] = $nontrivial_errors;
+    }
+    else {
+      unset($error_log[$error_code]);
+    }
+  }
+
+  return $error_log;
 }
