@@ -1775,8 +1775,21 @@ function drush_upgrade_copy_settings(&$target_alias, $settings_destination) {
     return drush_set_error('DRUSH_UPGRADE_COPY_FAILED', dt('Failed to copy @source to  @dest', array('@source' => $settings_source, 'dest' => $settings_destination)));
   }
 
-  // Append new $db_url with new DB name in target's settings.php.
-  return drush_upgrade_fix_db_url($target_alias, $settings_destination);
+  $migration_settings_source = conf_path() . '/migration.settings.php';
+  $migration_settings_dest = $settings_destination_folder . '/migration.settings.php';
+  if (file_exists($migration_settings_source)) {
+    // Copy migration.settings.php to target.
+    if (!drush_op('copy', $migration_settings_source, $migration_settings_dest) && !drush_get_context('DRUSH_SIMULATE')) {
+      return drush_set_error('DRUSH_UPGRADE_COPY_FAILED', dt('Failed to copy @source to  @dest', array('@source' => $migration_settings_source, '@dest' => $migration_settings_dest)));
+    }
+
+    // Ensure the migration settings are used by appending an include statement to settings.php.
+    $append = "\n# Added by drush site-upgrade.\nrequire '{$settings_destination_folder}/migration.settings.php';\n";
+    return drush_op('file_put_contents', $settings_destination, $append, FILE_APPEND) !== FALSE;
+  } else {
+    // Append new $db_url with new DB name in target's settings.php.
+    return drush_upgrade_fix_db_url($target_alias, $settings_destination);
+  }
 }
 
 /**
