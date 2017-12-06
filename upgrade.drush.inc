@@ -760,6 +760,8 @@ function _drush_upgrade_site_state_machine(&$fsm_context, $stages, $initial_stag
     // If a backup was requested, make it now.
     if ($backup_file) {
       $values = drush_invoke_process($fsm_context['target_key'], 'archive-dump', array(), array('destination' => $backup_file, 'overwrite' => TRUE), array('integrate' => FALSE));
+      $dump_file = $fsm_context['backup_dir'] . '/' . $control['backup'] . '.sql';
+      drush_invoke_process($fsm_context['target_key'], 'sql-dump', array(), array('result-file' => $dump_file), array('integrate' => FALSE));
     }
   }
 }
