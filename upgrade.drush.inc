@@ -413,7 +413,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
         drush_print(dt("Creating 'files' directory..."));
         passthru('mkdir -p ' . $fsm_context['destination_core'] . '/sites/default/files');
         drush_print(dt("Setting sane permissions..."));
-        passthru('which gslperms && sudo gslperms project ' . $fsm_context['destination_core']);
+        passthru('which gslperms && sudo gslperms project ' . dirname($fsm_context['destination_core']));
       }
     }
   }
