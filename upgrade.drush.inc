@@ -372,7 +372,7 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
           }
         }
 
-        $selection = drush_choice($options, dt("A Drupal site exists at the destination. What would you like to do?"));
+        $selection = drush_get_option('replace') ? 'replace' : drush_choice($options, dt("A Drupal site exists at the destination. What would you like to do?"));
         // Selected a backup item?
         if (is_string($selection) && array_key_exists($selection, $backups)) {
           $archive = $backups[$selection]['archive'];
