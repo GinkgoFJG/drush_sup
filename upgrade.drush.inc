@@ -409,11 +409,6 @@ function drush_upgrade_site_upgrade($target_key = NULL, $initial_stage = NULL) {
               return drush_user_abort();
           }
         }
-
-        drush_print(dt("Creating 'files' directory..."));
-        passthru('mkdir -p ' . $fsm_context['destination_core'] . '/sites/default/files');
-        drush_print(dt("Setting sane permissions..."));
-        passthru('which gslperms && sudo gslperms project ' . dirname($fsm_context['destination_core']));
       }
     }
   }
@@ -1375,6 +1370,14 @@ function _drush_upgrade_site_updatedb(&$fsm_context, $control) {
 }
 
 function _drush_upgrade_site_backup_after_updatedb(&$fsm_context, $control) {
+  // This is a convenient place to put these steps, even if they don't relate to a backup. According
+  // to my reading of upgrade.stages.inc, this function is called immediately after the core upgrade
+  // is completed. Apparently the actual backup is delegated -- no idea why...
+  drush_print(dt("Creating 'files' directory..."));
+  passthru('mkdir -p ' . $fsm_context['destination_core'] . '/sites/default/files');
+  drush_print(dt("Setting sane permissions..."));
+  passthru('which gslperms && sudo gslperms project ' . dirname($fsm_context['destination_core']));
+
   return TRUE;
 }
 
