@@ -1748,11 +1748,22 @@ function drush_upgrade_site_upgrade_prepare() {
   drush_invoke('pm-disable', $contrib_extensions);
   if (drush_get_error()) return FALSE; // Early exit if we see an error.
 
-  // Uninstall any modules specified via the --uninstall flag.
-  if (!empty($uninstall_extensions)) {
+  // Uninstall any modules specified via the --uninstall flag. Some modules cannot be uninstalled until their
+  // dependencies are uninstalled, so it may be necessary to loop through the module list multiple times.
+  // Note that there is potential for an infinite loop here (e.g., if the dependent is not passed in the list
+  // of modules to uninstall), but that seems preferable to me than for an uninstall to fail silently.
+  // (Techincally the failure isn't silent but this command creates so much output it might as well be.)
+  while (!empty($uninstall_extensions)) {
     drush_log(dt("Uninstalling !list", array('!list' => implode(", ", $uninstall_extensions))), 'ok');
     drush_invoke('pm-uninstall', $uninstall_extensions);
     if (drush_get_error()) return FALSE; // Early exit if we see an error.
+
+    // get the list of modules that are not installed
+    $query_not_installed = drush_invoke_process('@self', 'pm-list', array(), array('status' => 'not installed'), array('integrate' => FALSE));
+    $not_installed = array_keys($query_not_installed['object']);
+
+    // update the list of extensions to uninstall, leaving only those that weren't uninstalled
+    $uninstall_extensions = array_diff($uninstall_extensions, $not_installed);
   }
 }
 
